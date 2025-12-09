@@ -1,0 +1,5 @@
+{
+  "name": "账客通 (Ledger Connect)",
+  "description": "A professional ledger and accounts receivable management system designed for individual merchants. Features PWA capabilities, offline support, and multi-language support.",
+  "requestFramePermissions": []
+}

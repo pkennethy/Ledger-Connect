@@ -1,0 +1,21 @@
+{
+  "short_name": "Ledger",
+  "name": "Ledger Connect 账客通",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2521/2521826.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2521/2521826.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563EB",
+  "background_color": "#ffffff",
+  "orientation": "portrait"
+}
