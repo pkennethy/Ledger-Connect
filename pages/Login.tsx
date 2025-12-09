@@ -264,28 +264,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                         </form>
                     )}
 
-                    {/* DEMO CREDENTIALS HINT */}
-                    {step === 'PHONE' && (
-                        <div className="mt-6 bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Info size={16} className="text-blue-600" />
-                                <span className="font-bold">Demo Credentials</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 text-xs bg-white/50 p-2 rounded border border-blue-100">
-                                <div>
-                                    <span className="font-bold text-gray-700 block mb-1">Store Admin:</span>
-                                    <div className="font-mono text-gray-600">09000000000</div>
-                                    <div className="text-gray-500 mt-1">Pass: <span className="font-mono font-bold">admin</span></div>
-                                </div>
-                                <div>
-                                    <span className="font-bold text-gray-700 block mb-1">Customer:</span>
-                                    <div className="font-mono text-gray-600">09171234567</div>
-                                    <div className="text-gray-500 mt-1">Code: <span className="italic">On Screen</span></div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="mt-8 pt-6 border-t border-gray-100 text-center">
                         <button onClick={handleResetData} className="text-xs text-gray-400 hover:text-gray-600 underline">
                             Trouble logging in? Reset App Data

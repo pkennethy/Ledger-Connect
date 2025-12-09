@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { CONFIG } from '../config';
 
-// FORCE DISABLE for development phase
-const FORCE_DISABLE = true;
+// FORCE DISABLE for development phase - Set to false to allow connection
+const FORCE_DISABLE = false;
 
 // Determine the URL and Key to use.
 // We check if the user has updated the config.ts file from the placeholder defaults.
