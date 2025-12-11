@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Bell, Globe, Shield, Database, User as UserIcon, Mail, Camera, Download, Upload, Server, CheckCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
+import { Save, Bell, Globe, Shield, Database, User as UserIcon, Mail, Camera, Download, Upload, Server, CheckCircle, AlertTriangle, Copy, FileText, Lock } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, SystemSettings, User, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -24,6 +24,13 @@ export const Settings: React.FC<PageProps> = ({ lang, setLang, user, onUpdateUse
         phone: user.phone,
         avatarUrl: user.avatarUrl || ''
     });
+    
+    // Password Change State
+    const [passwords, setPasswords] = useState({
+        new: '',
+        confirm: ''
+    });
+
     const [isDirty, setIsDirty] = useState(false);
     
     // Refs for Import/Export
@@ -97,6 +104,29 @@ export const Settings: React.FC<PageProps> = ({ lang, setLang, user, onUpdateUse
         }
     };
 
+    const handleChangePassword = async () => {
+        if (!passwords.new || !passwords.confirm) {
+            showToast('Please fill in both password fields', 'error');
+            return;
+        }
+        if (passwords.new !== passwords.confirm) {
+            showToast('Passwords do not match', 'error');
+            return;
+        }
+        if (passwords.new.length < 6) {
+            showToast('Password must be at least 6 characters', 'error');
+            return;
+        }
+
+        try {
+            await MockService.changePassword(user.id, passwords.new);
+            showToast('Password updated successfully', 'success');
+            setPasswords({ new: '', confirm: '' });
+        } catch (e: any) {
+            showToast(e.message || 'Failed to update password', 'error');
+        }
+    };
+
     const handleExport = () => {
         try {
             const data = MockService.getBackupData();
@@ -133,34 +163,58 @@ export const Settings: React.FC<PageProps> = ({ lang, setLang, user, onUpdateUse
         reader.readAsText(file);
     };
 
+    const parseCSVLine = (line: string) => {
+        // Basic CSV split by comma, trimming quotes and whitespace
+        return line.split(',').map(item => item.trim().replace(/^"|"$/g, ''));
+    };
+
     const handleCustomerCSVImport = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
         showToast('Processing Customers CSV...', 'info');
 
-        // Simulate CSV processing
-        setTimeout(() => {
-            const mockImportedCustomers = [
-                { name: 'Imported User 1', phone: '09170001111', address: 'Makati', email: 'user1@example.com' },
-                { name: 'Imported User 2', phone: '09170002222', address: 'Pasig', email: 'user2@example.com' },
-            ];
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target?.result as string;
+            if (!text) return;
+
+            const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+            let importedCount = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Skip header row if it contains column names
+                if (i === 0 && line.toLowerCase().includes('name') && line.toLowerCase().includes('phone')) continue;
+
+                const cols = parseCSVLine(line);
+                if (cols.length < 2) continue; // Need at least name and phone
+
+                // Map columns: Name, Phone, Email, Address
+                const [name, phone, email, address] = cols;
+                
+                if (name && phone) {
+                    await MockService.addCustomer({
+                        id: `c-imp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                        name,
+                        phone,
+                        email: email || '',
+                        address: address || 'Philippines',
+                        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+                        totalDebt: 0,
+                        role: UserRole.CUSTOMER
+                    });
+                    importedCount++;
+                }
+            }
             
-            mockImportedCustomers.forEach(c => {
-                 MockService.addCustomer({
-                    id: `c-imp-${Date.now()}-${Math.random()}`,
-                    name: c.name,
-                    phone: c.phone,
-                    address: c.address,
-                    avatarUrl: `https://ui-avatars.com/api/?name=${c.name}&background=random`,
-                    totalDebt: 0,
-                    email: c.email,
-                    role: UserRole.CUSTOMER
-                });
-            });
-            
-            showToast(`Imported ${mockImportedCustomers.length} customers successfully`, 'success');
-        }, 1000);
+            if (importedCount > 0) {
+                showToast(`Imported ${importedCount} customers successfully`, 'success');
+            } else {
+                showToast('No valid customer records found in file', 'error');
+            }
+        };
+        reader.readAsText(file);
         
         if (event.target) event.target.value = '';
     };
@@ -169,22 +223,50 @@ export const Settings: React.FC<PageProps> = ({ lang, setLang, user, onUpdateUse
         const file = event.target.files?.[0];
         if (!file) return;
         
-        // Mock Import
         showToast('Processing Products CSV...', 'info');
-        setTimeout(() => {
-            const mockItems = [
-                { name: 'Imported Product A', price: 150, cost: 100, stock: 50, category: 'Imported' },
-                { name: 'Imported Product B', price: 250, cost: 200, stock: 20, category: 'Imported' }
-            ];
-            mockItems.forEach(p => {
-                 MockService.addProduct({
-                    id: `p-imp-${Date.now()}-${Math.random()}`,
-                    ...p,
-                    imageUrl: `https://picsum.photos/300/300?random=${Math.random()}`
-                });
-            });
-            showToast(`Imported ${mockItems.length} products successfully`, 'success');
-        }, 1000);
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target?.result as string;
+            if (!text) return;
+
+            const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+            let importedCount = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Skip header row
+                if (i === 0 && line.toLowerCase().includes('name') && line.toLowerCase().includes('price')) continue;
+
+                const cols = parseCSVLine(line);
+                if (cols.length < 2) continue; // Need at least name and price
+
+                // Map columns: Name, Price, Cost, Stock, Category
+                const [name, priceStr, costStr, stockStr, category] = cols;
+                const price = parseFloat(priceStr);
+
+                if (name && !isNaN(price)) {
+                     await MockService.addProduct({
+                        id: `p-imp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                        name,
+                        price,
+                        cost: parseFloat(costStr) || 0,
+                        stock: parseInt(stockStr) || 0,
+                        category: category || 'General',
+                        imageUrl: `https://picsum.photos/300/300?random=${Math.random()}`
+                    });
+                    importedCount++;
+                }
+            }
+
+            if (importedCount > 0) {
+                showToast(`Imported ${importedCount} products successfully`, 'success');
+            } else {
+                showToast('No valid product records found in file', 'error');
+            }
+        };
+        reader.readAsText(file);
+
         if (event.target) event.target.value = '';
     };
 
@@ -362,6 +444,42 @@ create policy "Public Access Repayments" on public.repayments for all using (tru
                                         onChange={e => { setProfileForm({...profileForm, email: e.target.value}); setIsDirty(true); }}
                                         className="w-full p-2 bg-white border-2 border-gray-300 dark:border-gray-500 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white placeholder-gray-500"
                                     />
+                                </div>
+                            </div>
+
+                            {/* Change Password Section */}
+                            <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                                <h4 className="text-md font-bold text-gray-800 dark:text-white mb-4 flex items-center">
+                                    <Lock size={16} className="mr-2" /> Security & Password
+                                </h4>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
+                                        <input 
+                                            type="password" 
+                                            value={passwords.new}
+                                            onChange={e => setPasswords({ ...passwords, new: e.target.value })}
+                                            placeholder="Enter new password"
+                                            className="w-full p-2 bg-white border-2 border-gray-300 dark:border-gray-500 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white placeholder-gray-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm Password</label>
+                                        <input 
+                                            type="password" 
+                                            value={passwords.confirm}
+                                            onChange={e => setPasswords({ ...passwords, confirm: e.target.value })}
+                                            placeholder="Confirm new password"
+                                            className="w-full p-2 bg-white border-2 border-gray-300 dark:border-gray-500 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white placeholder-gray-500"
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={handleChangePassword}
+                                        disabled={!passwords.new || !passwords.confirm}
+                                        className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Update Password
+                                    </button>
                                 </div>
                             </div>
                         </div>

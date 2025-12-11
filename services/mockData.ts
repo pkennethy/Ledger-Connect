@@ -241,6 +241,19 @@ export const MockService = {
     }
   },
 
+  // NEW: Change Password (Supports Local & Supabase)
+  changePassword: async (id: string, newPass: string) => {
+      // 1. Update Local Cache
+      CACHE_CUSTOMERS = CACHE_CUSTOMERS.map(c => c.id === id ? { ...c, password: newPass } : c);
+      saveLocal('LC_CUSTOMERS', CACHE_CUSTOMERS);
+
+      // 2. Update Supabase (If configured)
+      if (isSupabaseConfigured()) {
+          const { error } = await supabase.auth.updateUser({ password: newPass });
+          if (error) throw error;
+      }
+  },
+
   deleteCustomer: async (id: string) => {
     CACHE_CUSTOMERS = CACHE_CUSTOMERS.filter(c => c.id !== id);
     saveLocal('LC_CUSTOMERS', CACHE_CUSTOMERS);

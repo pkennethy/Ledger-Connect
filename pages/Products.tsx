@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid, LayoutList, AlertTriangle, Check, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid, LayoutList, AlertTriangle, Check, ArrowRight, ChevronLeft, ChevronRight, PackagePlus } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, User, UserRole, OrderStatus, Product } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -33,6 +33,11 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [newProduct, setNewProduct] = useState<Partial<Product>>({ category: 'General' });
+
+    // Admin: Quick Restock Modal State (NEW)
+    const [showRestockModal, setShowRestockModal] = useState(false);
+    const [restockTarget, setRestockTarget] = useState<Product | null>(null);
+    const [restockQty, setRestockQty] = useState('');
 
     // Cart State
     const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
@@ -139,6 +144,35 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
         setRefresh(prev => prev + 1);
     };
 
+    // --- QUICK RESTOCK ACTIONS ---
+    const handleOpenRestock = (product: Product, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setRestockTarget(product);
+        setRestockQty('');
+        setShowRestockModal(true);
+    };
+
+    const handleSubmitRestock = (e?: React.FormEvent) => {
+        e?.preventDefault();
+        if (!restockTarget || !restockQty) return;
+
+        const qtyToAdd = parseInt(restockQty);
+        if (isNaN(qtyToAdd) || qtyToAdd <= 0) {
+            showToast('Please enter a valid quantity greater than 0', 'error');
+            return;
+        }
+
+        const newStock = restockTarget.stock + qtyToAdd;
+        MockService.updateProduct(restockTarget.id, { stock: newStock });
+        
+        showToast(`Stock added! New total: ${newStock}`, 'success');
+        setProducts([...MockService.getProducts()]);
+        setShowRestockModal(false);
+        setRestockTarget(null);
+        setRestockQty('');
+    };
+
+    // --- CART ACTIONS ---
     const addToCart = (product: Product, e?: React.MouseEvent) => {
         e?.stopPropagation();
         const existing = cart.find(i => i.product.id === product.id);
@@ -371,11 +405,20 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                                         {isAdmin && adminMode === 'inventory' && (
                                             <>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                                                        product.stock < 20 ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'
-                                                    }`}>
-                                                        {product.stock}
-                                                    </span>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                                                            product.stock < 20 ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'
+                                                        }`}>
+                                                            {product.stock}
+                                                        </span>
+                                                        <button 
+                                                            onClick={(e) => handleOpenRestock(product, e)}
+                                                            className="p-1 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                                            title="Quick Restock"
+                                                        >
+                                                            <PackagePlus size={14} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-2 text-right hidden lg:table-cell">
                                                     <div className="flex flex-col items-end">
@@ -425,6 +468,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                             {/* Top Right Actions (Admin) */}
                             {isAdmin && adminMode === 'inventory' && (
                                 <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                    <button onClick={(e) => handleOpenRestock(product, e)} className="bg-white/90 p-1.5 rounded-full text-green-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform" title="Quick Restock"><PackagePlus size={14} /></button>
                                     <button onClick={(e) => handleOpenEdit(product, e)} className="bg-white/90 p-1.5 rounded-full text-blue-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform"><Edit size={14} /></button>
                                     <button onClick={(e) => handleDeleteProduct(product.id, e)} className="bg-white/90 p-1.5 rounded-full text-red-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform"><Trash2 size={14} /></button>
                                 </div>
@@ -484,6 +528,50 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                         >
                             <ChevronRight size={16} className="text-gray-600 dark:text-gray-300" />
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Restock Modal (Small, Fast) */}
+            {showRestockModal && restockTarget && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white">Quick Restock</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{restockTarget.name}</p>
+                            </div>
+                            <button onClick={() => setShowRestockModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><X size={20} className="text-gray-400" /></button>
+                        </div>
+                        
+                        <form onSubmit={handleSubmitRestock}>
+                            <div className="mb-4">
+                                <div className="flex justify-between text-sm mb-2 font-medium">
+                                    <span className="text-gray-600 dark:text-gray-300">Current Stock:</span>
+                                    <span className="text-gray-900 dark:text-white">{restockTarget.stock}</span>
+                                </div>
+                                <div className="relative">
+                                    <PackagePlus size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                    <input 
+                                        type="number" 
+                                        autoFocus
+                                        placeholder="Qty to add" 
+                                        className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-lg font-bold"
+                                        value={restockQty}
+                                        onChange={(e) => setRestockQty(e.target.value)}
+                                    />
+                                </div>
+                                {restockQty && !isNaN(parseInt(restockQty)) && (
+                                    <div className="mt-2 text-right text-sm">
+                                        <span className="text-gray-500">New Total: </span>
+                                        <span className="font-bold text-green-600">{restockTarget.stock + parseInt(restockQty)}</span>
+                                    </div>
+                                )}
+                            </div>
+                            <button type="submit" className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-500/30">
+                                Confirm Restock
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}
