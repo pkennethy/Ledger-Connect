@@ -49,7 +49,7 @@ The application is built as a Progressive Web App (PWA) capable of running offli
     *   **Category Assignment**: When charging to credit, items can be categorized (e.g., "Groceries", "Loans") for granular ledger tracking.
 
 ### 3.5. Order Management
-*   **Workflow**: Pending -> Confirmed -> Delivering -> Completed (or Cancelled).
+*   **Workflow**: Pending → Confirmed → Delivering → Completed (or Cancelled).
 *   **Debt Integration**: When an order is confirmed as "Credit", it automatically generates a Debt Record in the ledger.
 *   **Receipts**: Thermal-printer friendly receipt layout.
 
@@ -132,7 +132,7 @@ The app works out-of-the-box using `localStorage`. No server setup is required f
 ### 5.2. Supabase Integration
 To enable cloud sync:
 1.  Create a Supabase Project.
-2.  Run the SQL script provided in the **Settings > Database** tab of the application.
+2.  Run the SQL script provided in the **Settings → Database** tab of the application.
 3.  Update `config.ts` with your `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 
 ### 5.3. Adsterra
@@ -148,4 +148,3 @@ To enable ads:
 3.  **Credit vs Cash**:
     *   **Cash**: Creates an Order (Completed) and a Repayment record immediately.
     *   **Credit**: Creates an Order (Confirmed) and a Debt Record.
-

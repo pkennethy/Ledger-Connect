@@ -47,7 +47,7 @@ This application uses **Supabase** for the backend database and authentication.
 1.  **Create a Project**: Go to [Supabase](https://supabase.com/) and create a new project.
 2.  **SQL Setup**:
     *   Go to the **SQL Editor** in your Supabase dashboard.
-    *   Copy the SQL script located in the app under **Settings > Database > Setup Required**.
+    *   Copy the SQL script located in the app under **Settings → Database → Setup Required**.
     *   Alternatively, use the SQL script provided below:
 
     <details>
@@ -137,7 +137,7 @@ This application uses **Supabase** for the backend database and authentication.
     </details>
 
 3.  **Auth Settings**:
-    *   Go to **Authentication > Providers > Email**.
+    *   Go to **Authentication → Providers → Email**.
     *   **Disable** "Confirm email". (This app uses phone numbers as pseudo-IDs and email for data, skipping the verification loop for simplicity).
 
 ### 4. Configuration
@@ -150,7 +150,7 @@ Update the application config with your Supabase credentials.
 ```typescript
 export const CONFIG = {
   SUPABASE: {
-    // Found in Supabase Dashboard -> Settings -> API
+    // Found in Supabase Dashboard → Settings → API
     URL: 'https://your-project-id.supabase.co', 
     ANON_KEY: 'your-public-anon-key'
   },
@@ -184,5 +184,5 @@ This app is designed as a **PWA (Progressive Web App)**.
 ## ⚠️ Troubleshooting
 
 *   **Database Connection Failed**: Ensure `config.ts` has the correct URL/Key and you have run the SQL setup script.
-*   **Login Issues**: If using Supabase, ensure "Confirm Email" is disabled. If stuck, go to Settings -> Data & Backup -> Factory Reset.
+*   **Login Issues**: If using Supabase, ensure "Confirm Email" is disabled. If stuck, go to Settings → Data & Backup → Factory Reset.
 *   **Print Not Working**: Ensure pop-ups are allowed for the print dialog window.

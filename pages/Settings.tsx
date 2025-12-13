@@ -709,7 +709,7 @@ create policy "Public Access Repayments" on public.repayments for all using (tru
                                 </h4>
                                 <div className="text-sm text-blue-700 dark:text-blue-400 mb-3 space-y-1">
                                     <p>1. Copy the SQL below and run it in Supabase SQL Editor.</p>
-                                    <p className="font-bold">2. Disable "Confirm Email" in Supabase Auth -> Providers -> Email.</p>
+                                    <p className="font-bold">2. Disable "Confirm Email" in Supabase Auth &rarr; Providers &rarr; Email.</p>
                                 </div>
                                 <button 
                                     onClick={copySQL}
