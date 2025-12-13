@@ -1,12 +1,12 @@
 // Service Worker for Ledger Connect
-const CACHE_NAME = 'ledger-connect-v2';
+const CACHE_NAME = 'ledger-connect-v5';
 const urlsToCache = [
+  './',
   './index.html',
   './manifest.json'
 ];
 
 self.addEventListener('install', event => {
-  // Skip waiting to ensure the new service worker takes over immediately
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -17,7 +17,6 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  // Clean up old caches immediately
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
@@ -33,26 +32,32 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // 1. Navigation Requests (HTML): Network First, Fallback to Cache
-  // This ensures the user gets the latest version if online, but loads the app shell if offline/error.
+  // Navigation (HTML) - Network First, SPA Fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
+        .then(response => {
+          // If 404 (Not Found), return index.html (SPA Fallback)
+          if (!response || response.status === 404) {
+            return caches.match('./')
+              .then(resp => resp || caches.match('./index.html'));
+          }
+          return response;
+        })
         .catch(() => {
-          return caches.match('./index.html');
+          // Offline -> Return cached root or index.html
+          return caches.match('./')
+            .then(resp => resp || caches.match('./index.html'));
         })
     );
     return;
   }
 
-  // 2. Asset Requests (JS, CSS, Images): Cache First, Fallback to Network
+  // Assets (Cache First, Network Fallback)
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
+        return response || fetch(event.request);
       })
   );
 });
