@@ -8,7 +8,10 @@ export const CONFIG = {
   },
   ADSTERRA: {
     ENABLED: true,
-    // The key provided by the user
-    KEY: '21f8461d6e540c2d6e7aa1c5d9b0e3d4' 
+    // Desktop Key (468x60)
+    KEY: '21f8461d6e540c2d6e7aa1c5d9b0e3d4',
+    // Mobile Key (320x50) - Create a new 320x50 unit in Adsterra and paste key here. 
+    // If left empty, it will try to use the desktop key (might not load).
+    MOBILE_KEY: '' 
   }
 };

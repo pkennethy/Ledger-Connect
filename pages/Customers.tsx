@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Phone, MapPin, MoreVertical, X, User as UserIcon, Trash2, Edit, Mail, History, ShoppingBag, ArrowDownLeft, ArrowUpRight, FileText, Image, LayoutGrid, LayoutList, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, MoreVertical, X, User as UserIcon, Trash2, Edit, Mail, History, ShoppingBag, ArrowDownLeft, ArrowUpRight, FileText, Image, LayoutGrid, LayoutList, Wallet, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, Customer, User, UserRole } from '../types';
@@ -137,6 +137,127 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
         setShowHistoryModal(true);
     };
 
+    // Helper reused for local date calculation (duplicated to avoid export issues across files)
+    const getLocalDateFromISO = (isoDate: string) => {
+        const d = new Date(isoDate);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const getTodayString = () => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const handleSendSMS = (customer: Customer, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (!customer.phone) {
+            showToast(`No phone number for ${customer.name}`, 'error');
+            return;
+        }
+
+        // Default to Today for Quick Action
+        const targetDate = getTodayString();
+        
+        // Format for display
+        const dateObj = new Date(targetDate);
+        const dateDisplay = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+        const rawDebts = MockService.getDebts(customer.id);
+        const rawPayments = MockService.getRepayments(customer.id);
+
+        // 3. Get Unique Categories involved
+        const categories = Array.from(new Set([
+            ...rawDebts.map(d => d.category),
+            ...rawPayments.map(p => p.category)
+        ])).sort();
+
+        let grandTotal = 0;
+        const breakdownLines: string[] = [];
+
+        // 4. Per-Category Calculation
+        categories.forEach(cat => {
+            // Split based on date
+            // Previous: Strictly less than targetDate
+            const prevDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) < targetDate);
+            const prevPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) < targetDate);
+            
+            const prevBal = prevDebts.reduce((sum, d) => sum + d.amount, 0) - prevPayments.reduce((sum, p) => sum + p.amount, 0);
+
+            // Current: Equal to targetDate
+            const currDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) === targetDate);
+            const currPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) === targetDate);
+
+            // Group items for display
+            // Accumulate quantity AND total price per product
+            const productMap: Record<string, {qty: number, val: number}> = {};
+            currDebts.forEach(d => {
+                d.items.forEach(i => {
+                    const itemTotal = i.price * i.quantity;
+                    if (!productMap[i.productName]) {
+                        productMap[i.productName] = { qty: 0, val: 0 };
+                    }
+                    productMap[i.productName].qty += i.quantity;
+                    productMap[i.productName].val += itemTotal;
+                });
+            });
+
+            const totalNewCharges = currDebts.reduce((sum, d) => sum + d.amount, 0);
+            const totalNewPayments = currPayments.reduce((sum, p) => sum + p.amount, 0);
+            
+            const endBal = prevBal + totalNewCharges - totalNewPayments;
+
+            // Only display category if there's activity or a balance
+            if (Math.abs(endBal) > 0.01 || totalNewCharges > 0 || totalNewPayments > 0) {
+                breakdownLines.push(`[${cat}]`);
+                
+                if (Math.abs(prevBal) > 0.01) {
+                    breakdownLines.push(`  Beg Bal: ₱${prevBal.toLocaleString()}`);
+                }
+
+                // Sort by value and display with quantity
+                Object.entries(productMap)
+                    .sort((a,b) => b[1].val - a[1].val)
+                    .forEach(([name, data]) => {
+                        breakdownLines.push(`  + ${name} (x${data.qty}): ₱${data.val.toLocaleString()}`);
+                    });
+
+                // List individual payments instead of sum
+                currPayments.forEach(p => {
+                    breakdownLines.push(`  - Payment: ₱${p.amount.toLocaleString()}`);
+                });
+
+                breakdownLines.push(`  = End Bal: ₱${endBal.toLocaleString()}`);
+                grandTotal += endBal;
+            }
+        });
+
+        const breakdown = breakdownLines.join('\n');
+
+        let message = `STATEMENT OF ACCOUNT\nDate: ${dateDisplay}\n\nBill To: ${customer.name}\n\n-- TOTAL DUE: ₱${grandTotal.toLocaleString()} --`;
+
+        if (breakdown) {
+            message += `\n\nDETAILS:\n${breakdown}`;
+        }
+        
+        message += `\n\nPlease remit payment to Ledger Connect.`;
+
+        // Determine separator based on OS
+        const ua = navigator.userAgent.toLowerCase();
+        const isiOS = /iphone|ipad|ipod/.test(ua);
+        const separator = isiOS ? '&' : '?';
+
+        // Clean phone number
+        const cleanPhone = customer.phone.replace(/[^0-9+]/g, '');
+
+        window.location.href = `sms:${cleanPhone}${separator}body=${encodeURIComponent(message)}`;
+    };
+
     // Helper to get combined transactions
     const getCustomerTransactions = (customerId: string) => {
         const orders = MockService.getOrders(customerId).map(o => ({
@@ -261,6 +382,7 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
                                         </td>
                                         <td className="px-4 py-2 text-right">
                                             <div className="flex justify-end gap-2">
+                                                <button onClick={(e) => handleSendSMS(customer, e)} className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors" title="Send SMS"><MessageSquare size={14} /></button>
                                                 <button onClick={(e) => handleOpenEdit(customer, e)} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={14} /></button>
                                                 <button onClick={(e) => handleDelete(customer.id, e)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
                                             </div>
@@ -292,6 +414,7 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
 
                              {/* Top Right Actions */}
                              <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                <button onClick={(e) => handleSendSMS(customer, e)} className="bg-white/90 p-1.5 rounded-full text-green-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform" title="SMS Reminder"><MessageSquare size={14} /></button>
                                 <button onClick={(e) => handleOpenEdit(customer, e)} className="bg-white/90 p-1.5 rounded-full text-blue-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform"><Edit size={14} /></button>
                                 <button onClick={(e) => handleDelete(customer.id, e)} className="bg-white/90 p-1.5 rounded-full text-red-600 shadow-sm backdrop-blur-sm hover:scale-110 transition-transform"><Trash2 size={14} /></button>
                             </div>

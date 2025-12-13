@@ -44,6 +44,17 @@ function AppContent() {
       root.classList.remove('dark');
     }
   }, [settings.theme]); 
+
+  // Prevent Right Click / Context Menu
+  useEffect(() => {
+    const handleContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
   
   const handleSetLang = (newLang: Language) => {
       setLang(newLang);

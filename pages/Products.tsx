@@ -3,6 +3,7 @@ import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, User, UserRole, OrderStatus, Product } from '../types';
 import { useToast } from '../context/ToastContext';
+import { NumpadModal } from '../components/NumpadModal';
 
 interface PageProps {
     lang: Language;
@@ -42,6 +43,11 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
     // Cart State
     const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
     const [showCart, setShowCart] = useState(false);
+    
+    // Numpad State
+    const [showNumpad, setShowNumpad] = useState(false);
+    const [numpadTargetId, setNumpadTargetId] = useState<string | null>(null);
+    const [numpadInitialValue, setNumpadInitialValue] = useState(1);
     
     // POS State
     const [posCustomer, setPosCustomer] = useState('');
@@ -202,6 +208,19 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
             return i;
         }));
     };
+    
+    // Numpad Handlers
+    const openNumpad = (productId: string, currentQty: number) => {
+        setNumpadTargetId(productId);
+        setNumpadInitialValue(currentQty);
+        setShowNumpad(true);
+    };
+
+    const handleNumpadConfirm = (val: number) => {
+        if (numpadTargetId) {
+            setCart(cart.map(i => i.product.id === numpadTargetId ? { ...i, qty: val } : i));
+        }
+    };
 
     const handleCheckout = () => {
         if (cart.length === 0) return;
@@ -359,7 +378,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                     <p>No products found</p>
                 </div>
             ) : viewMode === 'list' ? (
-                // --- TABLE VIEW (Dense for Inventory) ---
+                // ... (Table View - No Changes needed here) ...
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -447,7 +466,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                     </div>
                 </div>
             ) : (
-                // --- GRID VIEW (Compact & Immersive) ---
+                // ... (Grid View - No changes needed here) ...
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
                     {paginatedProducts.map(product => (
                         <div 
@@ -504,34 +523,8 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             )}
 
-            {/* Pagination Controls */}
-            {filteredProducts.length > 0 && (
-                <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Showing <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-bold">{Math.min(currentPage * itemsPerPage, filteredProducts.length)}</span> of <span className="font-bold">{filteredProducts.length}</span> items
-                    </div>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronLeft size={16} className="text-gray-600 dark:text-gray-300" />
-                        </button>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center px-2">
-                            Page {currentPage} of {totalPages}
-                        </span>
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
-                            className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronRight size={16} className="text-gray-600 dark:text-gray-300" />
-                        </button>
-                    </div>
-                </div>
-            )}
-
+            {/* ... (Restock, Add Modals) ... */}
+            
             {/* Quick Restock Modal (Small, Fast) */}
             {showRestockModal && restockTarget && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
@@ -630,7 +623,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             )}
 
-            {/* Debt Category Assignment Modal (NEW) */}
+            {/* Debt Category Assignment Modal */}
             {showDebtAssignModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
@@ -658,8 +651,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                                                 className="w-full text-xs p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
                                                 placeholder="Debt Category..."
                                                 autoComplete="off"
-                                                // Key Fix: Use || '' to ensure fully controlled component without fallback to props during render.
-                                                // State is already initialized in handleCheckout with defaults.
                                                 value={debtAssignments[item.product.id] || ''}
                                                 onChange={(e) => setDebtAssignments({
                                                     ...debtAssignments,
@@ -725,9 +716,17 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                                                    <button onClick={() => updateQty(item.product.id, -1)} className="p-1 hover:bg-white rounded"><Minus size={14} /></button>
-                                                    <span className="text-sm font-bold w-8 text-center">{item.qty}</span>
-                                                    <button onClick={() => updateQty(item.product.id, 1)} className="p-1 hover:bg-white rounded"><Plus size={14} /></button>
+                                                    <button onClick={() => updateQty(item.product.id, -1)} className="p-1 hover:bg-white rounded text-gray-600"><Minus size={14} /></button>
+                                                    
+                                                    {/* QUANTITY BUTTON TRIGGER */}
+                                                    <button 
+                                                        onClick={() => openNumpad(item.product.id, item.qty)}
+                                                        className="w-12 text-center text-sm font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
+                                                    >
+                                                        {item.qty}
+                                                    </button>
+                                                    
+                                                    <button onClick={() => updateQty(item.product.id, 1)} className="p-1 hover:bg-white rounded text-gray-600"><Plus size={14} /></button>
                                                 </div>
                                                 <button onClick={() => removeFromCart(item.product.id)} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={16} /></button>
                                             </div>
@@ -764,6 +763,15 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                     </div>
                 </div>
             )}
+
+            {/* NUMPAD MODAL */}
+            <NumpadModal 
+                isOpen={showNumpad}
+                initialValue={numpadInitialValue}
+                title="Enter Quantity"
+                onClose={() => setShowNumpad(false)}
+                onConfirm={handleNumpadConfirm}
+            />
         </div>
     );
 };

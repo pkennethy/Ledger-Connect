@@ -7,36 +7,52 @@ export const AdBanner: React.FC = () => {
     const [isVisible, setIsVisible] = useState(true);
 
     useEffect(() => {
-        // Only load script if enabled and key exists
-        if (!CONFIG.ADSTERRA.ENABLED || !CONFIG.ADSTERRA.KEY || !containerRef.current) return;
+        if (!CONFIG.ADSTERRA.ENABLED || !containerRef.current) return;
 
-        const key = CONFIG.ADSTERRA.KEY;
-        
         // Responsive Logic
         const screenWidth = window.innerWidth;
         let adWidth = 468;
         let adHeight = 60;
+        let key = CONFIG.ADSTERRA.KEY;
 
-        if (screenWidth < 480) {
+        // Mobile Breakpoint (increased to < 768px to catch tablets/large phones)
+        // If the user specified the banner is 320x50, we ensure this size is used on smaller screens
+        if (screenWidth < 768) {
             adWidth = 320;
             adHeight = 50;
+            // Use Mobile Key if available, otherwise fallback to Main Key
+            if (CONFIG.ADSTERRA.MOBILE_KEY) {
+                key = CONFIG.ADSTERRA.MOBILE_KEY;
+            }
         }
 
+        if (!key) return;
+
         const iframe = document.createElement('iframe');
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
+        iframe.style.width = `${adWidth}px`;
+        iframe.style.height = `${adHeight}px`;
         iframe.style.border = 'none';
         iframe.style.overflow = 'hidden';
+        iframe.style.backgroundColor = 'transparent'; // Ensure transparent background
         iframe.scrolling = 'no';
-        // Permissions for ad scripts to run correctly
-        iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-same-origin', 'allow-forms', 'allow-popups-to-escape-sandbox');
+        iframe.title = "Advertisement";
         
         const adHtml = `
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
-                    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; background: transparent; overflow: hidden; font-family: sans-serif; }
+                    html, body { 
+                        margin: 0; 
+                        padding: 0; 
+                        width: 100%; 
+                        height: 100%; 
+                        background-color: transparent !important; 
+                        display: flex; 
+                        justify-content: center; 
+                        align-items: center; 
+                        overflow: hidden; 
+                    }
                 </style>
             </head>
             <body>
@@ -54,7 +70,7 @@ export const AdBanner: React.FC = () => {
             </html>
         `;
 
-        // Clear previous content to prevent duplicates
+        // Clear previous content
         containerRef.current.innerHTML = '';
         containerRef.current.appendChild(iframe);
 
@@ -74,18 +90,14 @@ export const AdBanner: React.FC = () => {
     if (!CONFIG.ADSTERRA.ENABLED || !isVisible) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-white border-t border-gray-200 z-[100] shadow-[0_-4px_10px_rgba(0,0,0,0.05)] overflow-hidden print:hidden">
+        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-slate-900 border-t border-gray-800 z-[100] shadow-[0_-4px_10px_rgba(0,0,0,0.1)] overflow-hidden print:hidden flex justify-center items-center">
              
              {/* 1. AD LAYER (Top Priority Z-Index) */}
-             {/* This layer sits on top. If the ad loads opaque content, it covers the backup layer below. */}
-             {/* If the ad fails to load (AdBlock) or is transparent, the backup layer is visible. */}
-             <div ref={containerRef} className="absolute inset-0 z-20 flex items-center justify-center w-full h-full pointer-events-auto bg-transparent"></div>
+             <div ref={containerRef} className="absolute inset-0 z-20 flex items-center justify-center w-full h-full pointer-events-auto"></div>
 
              {/* 2. BACKUP / HOUSE AD LAYER (Bottom Z-Index) */}
-             {/* Professional design shown when ads are missing */}
              <div className="absolute inset-0 z-10 w-full h-full bg-gradient-to-r from-slate-900 to-slate-800 flex items-center justify-between px-4 sm:px-6">
                 
-                {/* Subtle Texture */}
                 <div className="absolute inset-0 opacity-10 pointer-events-none" 
                      style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '20px 20px' }}>
                 </div>
@@ -98,16 +110,10 @@ export const AdBanner: React.FC = () => {
                         <p className="text-xs font-bold tracking-wider uppercase text-slate-200">
                             Ledger <span className="text-white">Premium</span>
                         </p>
-                        <p className="text-[10px] text-slate-400 font-medium hidden sm:block">
-                            Get offline mode & priority support
-                        </p>
                     </div>
                 </div>
                 
                 <div className="flex items-center gap-3 relative z-10">
-                    <button className="flex items-center gap-1 text-[10px] font-bold bg-white text-slate-900 px-3 py-1.5 rounded-full shadow hover:bg-slate-100 hover:scale-105 transition-all uppercase tracking-wider">
-                        Upgrade <ArrowRight size={10} />
-                    </button>
                     <button 
                         onClick={() => setIsVisible(false)} 
                         className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
