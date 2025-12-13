@@ -397,60 +397,68 @@ export const Orders: React.FC<PageProps> = ({ lang, user }) => {
                             )}
                         </div>
 
-                        {/* HIDDEN PRINT RECEIPT (Only visible on print) */}
-                        <div id="printable-receipt" className="hidden">
-                            <div className="text-center mb-4">
-                                <h2 className="text-xl font-bold uppercase">Ledger Connect</h2>
-                                <p className="text-sm">Store Address, City, PH</p>
-                                <p className="text-sm">Tel: +63 900 000 0000</p>
+                        {/* THERMAL PRINTER RECEIPT LAYOUT (Visible only on print) */}
+                        <div id="printable-receipt" className="hidden printable-content">
+                            <div className="print-center">
+                                <h2 className="print-bold" style={{ fontSize: '16px', margin: '5px 0' }}>LEDGER CONNECT</h2>
+                                <div style={{ fontSize: '10px' }}>Store Address, City, PH</div>
+                                <div style={{ fontSize: '10px', marginBottom: '5px' }}>Tel: +63 900 000 0000</div>
                             </div>
                             
-                            <div className="mb-4 border-b border-black pb-2 border-dashed">
-                                <div className="flex justify-between text-sm">
-                                    <span>Date: {new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
-                                    <span>Time: {new Date(selectedOrder.createdAt).toLocaleTimeString()}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span>Order #: {selectedOrder.id.replace('ord-', '')}</span>
-                                    <span>Cust: {selectedOrder.customerName}</span>
-                                </div>
+                            <div className="print-dashed"></div>
+                            
+                            <div className="print-row">
+                                <span>Date:</span>
+                                <span>{new Date(selectedOrder.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <div className="print-row">
+                                <span>Time:</span>
+                                <span>{new Date(selectedOrder.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <div className="print-row">
+                                <span>Order #:</span>
+                                <span>{selectedOrder.id.replace('ord-', '')}</span>
+                            </div>
+                            <div className="print-row">
+                                <span>Cust:</span>
+                                <span>{selectedOrder.customerName}</span>
                             </div>
 
-                            <table className="w-full text-sm mb-4">
-                                <thead>
-                                    <tr className="border-b border-black border-dashed">
-                                        <th className="text-left py-1">Qty</th>
-                                        <th className="text-left py-1">Item</th>
-                                        <th className="text-right py-1">Price</th>
-                                        <th className="text-right py-1">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {selectedOrder.items.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td className="py-1 align-top">{item.quantity}</td>
-                                            <td className="py-1 align-top">{item.productName}</td>
-                                            <td className="py-1 align-top text-right">{item.price}</td>
-                                            <td className="py-1 align-top text-right">{item.price * item.quantity}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                            <div className="print-dashed"></div>
 
-                            <div className="border-t border-black border-dashed pt-2 mb-6">
-                                <div className="flex justify-between font-bold text-lg">
-                                    <span>TOTAL</span>
-                                    <span>₱{selectedOrder.totalAmount.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between text-sm mt-1">
-                                    <span>Status</span>
-                                    <span className="uppercase">{selectedOrder.status}</span>
-                                </div>
+                            {/* Items Header */}
+                            <div style={{ display: 'flex', fontWeight: 'bold', marginBottom: '2px' }}>
+                                <span style={{ width: '10%' }}>Q</span>
+                                <span style={{ width: '50%' }}>Item</span>
+                                <span style={{ width: '20%', textAlign: 'right' }}>@</span>
+                                <span style={{ width: '20%', textAlign: 'right' }}>Amt</span>
                             </div>
 
-                            <div className="text-center text-sm">
-                                <p>Thank you for your purchase!</p>
-                                <p className="mt-2 text-xs">Powered by Ledger Connect</p>
+                            {/* Items List */}
+                            {selectedOrder.items.map((item, idx) => (
+                                <div key={idx} style={{ display: 'flex', marginBottom: '2px' }}>
+                                    <span style={{ width: '10%' }}>{item.quantity}</span>
+                                    <span style={{ width: '50%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.productName}</span>
+                                    <span style={{ width: '20%', textAlign: 'right' }}>{item.price}</span>
+                                    <span style={{ width: '20%', textAlign: 'right' }}>{item.price * item.quantity}</span>
+                                </div>
+                            ))}
+
+                            <div className="print-dashed"></div>
+
+                            <div className="print-row print-bold" style={{ fontSize: '14px' }}>
+                                <span>TOTAL</span>
+                                <span>P {selectedOrder.totalAmount.toLocaleString()}</span>
+                            </div>
+                            
+                            <div className="print-row" style={{ marginTop: '5px' }}>
+                                <span>Status:</span>
+                                <span style={{ textTransform: 'uppercase' }}>{selectedOrder.status}</span>
+                            </div>
+
+                            <div className="print-center" style={{ marginTop: '15px' }}>
+                                <div>Thank you!</div>
+                                <div style={{ fontSize: '10px', marginTop: '5px' }}>Powered by Ledger Connect</div>
                             </div>
                         </div>
 

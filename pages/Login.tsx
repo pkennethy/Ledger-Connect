@@ -103,6 +103,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
             
             if (user) {
                 window.location.hash = '/';
+                // PERSIST SESSION
+                localStorage.setItem('LC_CURRENT_USER', JSON.stringify(user));
                 onLogin(user);
                 showToast(isRegistering ? 'Account created successfully!' : `Welcome back, ${user.name}!`, 'success');
             }

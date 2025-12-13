@@ -85,6 +85,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
       }
   };
 
+  const handleLogout = () => {
+      localStorage.removeItem('LC_CURRENT_USER');
+      onLogout();
+  };
+
   const adminNavItems = [
     { path: '/', icon: <LayoutDashboard size={20} />, label: t.dashboard },
     { path: '/orders', icon: <ShoppingCart size={20} />, label: t.orders },
@@ -191,7 +196,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
                 </button>
             </div>
             <button 
-              onClick={onLogout}
+              onClick={handleLogout}
               className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
             >
               <LogOut size={18} className="mr-2" />
@@ -239,7 +244,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
              
              {/* Mobile Logout Button (Visible only on small screens) */}
              <button 
-                onClick={onLogout}
+                onClick={handleLogout}
                 className="lg:hidden p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
                 title={t.logout}
              >

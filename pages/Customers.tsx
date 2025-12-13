@@ -217,35 +217,35 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
                 breakdownLines.push(`[${cat}]`);
                 
                 if (Math.abs(prevBal) > 0.01) {
-                    breakdownLines.push(`  Beg Bal: ₱${prevBal.toLocaleString()}`);
+                    breakdownLines.push(`  Beg: P${prevBal.toLocaleString()}`);
                 }
 
                 // Sort by value and display with quantity
                 Object.entries(productMap)
                     .sort((a,b) => b[1].val - a[1].val)
                     .forEach(([name, data]) => {
-                        breakdownLines.push(`  + ${name} (x${data.qty}): ₱${data.val.toLocaleString()}`);
+                        breakdownLines.push(`  + ${name} (x${data.qty}): P${data.val.toLocaleString()}`);
                     });
 
                 // List individual payments instead of sum
                 currPayments.forEach(p => {
-                    breakdownLines.push(`  - Payment: ₱${p.amount.toLocaleString()}`);
+                    breakdownLines.push(`  - Paid: P${p.amount.toLocaleString()}`);
                 });
 
-                breakdownLines.push(`  = End Bal: ₱${endBal.toLocaleString()}`);
+                breakdownLines.push(`  = End: P${endBal.toLocaleString()}`);
                 grandTotal += endBal;
             }
         });
 
         const breakdown = breakdownLines.join('\n');
 
-        let message = `STATEMENT OF ACCOUNT\nDate: ${dateDisplay}\n\nBill To: ${customer.name}\n\n-- TOTAL DUE: ₱${grandTotal.toLocaleString()} --`;
+        let message = `SOA\n${dateDisplay}\n\nTo: ${customer.name}\n\nTOTAL DUE: P${grandTotal.toLocaleString()}`;
 
         if (breakdown) {
             message += `\n\nDETAILS:\n${breakdown}`;
         }
         
-        message += `\n\nPlease remit payment to Ledger Connect.`;
+        message += `\n\n- Ledger Connect`;
 
         // Determine separator based on OS
         const ua = navigator.userAgent.toLowerCase();

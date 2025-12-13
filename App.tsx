@@ -24,7 +24,14 @@ function AppContent() {
   useEffect(() => {
       const init = async () => {
           try {
+              // 1. Initialize Data Service
               await MockService.initialize();
+              
+              // 2. Check for Persisted User Session
+              const savedUser = localStorage.getItem('LC_CURRENT_USER');
+              if (savedUser) {
+                  setUser(JSON.parse(savedUser));
+              }
           } catch (e) {
               console.error("Failed to sync data", e);
               showToast("Failed to sync with server. Using offline data.", "error");
@@ -63,7 +70,9 @@ function AppContent() {
 
   const handleUpdateUser = (updates: Partial<User>) => {
       if (user) {
-          setUser({ ...user, ...updates });
+          const updatedUser = { ...user, ...updates };
+          setUser(updatedUser);
+          localStorage.setItem('LC_CURRENT_USER', JSON.stringify(updatedUser));
       }
   };
 

@@ -461,29 +461,29 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
 
             if (Math.abs(endBal) > 0.01 || totalNewCharges > 0 || totalNewPayments > 0) {
                 breakdownLines.push(`[${cat}]`);
-                if (Math.abs(prevBal) > 0.01) breakdownLines.push(`  Beg Bal: ₱${prevBal.toLocaleString()}`);
+                if (Math.abs(prevBal) > 0.01) breakdownLines.push(`  Beg: P${prevBal.toLocaleString()}`);
                 
                 // Sort by value and display with quantity
                 Object.entries(productMap)
                     .sort((a,b) => b[1].val - a[1].val)
                     .forEach(([name, data]) => {
-                        breakdownLines.push(`  + ${name} (x${data.qty}): ₱${data.val.toLocaleString()}`);
+                        breakdownLines.push(`  + ${name} (x${data.qty}): P${data.val.toLocaleString()}`);
                     });
 
                 // List individual payments instead of sum
                 currPayments.forEach(p => {
-                    breakdownLines.push(`  - Payment: ₱${p.amount.toLocaleString()}`);
+                    breakdownLines.push(`  - Paid: P${p.amount.toLocaleString()}`);
                 });
 
-                breakdownLines.push(`  = End Bal: ₱${endBal.toLocaleString()}`);
+                breakdownLines.push(`  = End: P${endBal.toLocaleString()}`);
                 grandTotal += endBal;
             }
         });
 
         const breakdown = breakdownLines.join('\n');
-        let message = `STATEMENT OF ACCOUNT\nDate: ${dateDisplay}\n\nBill To: ${customer.name}\n\n-- TOTAL DUE: ₱${grandTotal.toLocaleString()} --`;
+        let message = `SOA\n${dateDisplay}\n\nTo: ${customer.name}\n\nTOTAL DUE: P${grandTotal.toLocaleString()}`;
         if (breakdown) message += `\n\nDETAILS:\n${breakdown}`;
-        message += `\n\nPlease remit payment to Ledger Connect.`;
+        message += `\n\n- Ledger Connect`;
         const cleanPhone = customer.phone.replace(/[^0-9+]/g, '');
         const isiOS = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
         window.location.href = `sms:${cleanPhone}${isiOS ? '&' : '?'}body=${encodeURIComponent(message)}`;
@@ -675,12 +675,53 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                 <div className="fixed inset-0 bg-black bg-opacity-70 z-[200] flex items-center justify-center p-4">
                      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[95vh]">
                          <div className="bg-gray-800 text-white p-3 flex justify-between items-center shrink-0 no-print"><h3 className="font-bold flex items-center gap-2"><FileText size={18}/> Print Preview</h3><div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium flex items-center"><Printer size={16} className="mr-2"/> Print Statement</button><button onClick={() => setShowReportModal(false)} className="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg"><X size={18}/></button></div></div>
-                         <div className="flex-1 overflow-y-auto p-8 bg-white text-gray-900 printable-content">
+                         
+                         {/* WEB VIEW (Hidden on Print) */}
+                         <div className="flex-1 overflow-y-auto p-8 bg-white text-gray-900 relative print:hidden" id="web-invoice">
                              <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-8"><div><h1 className="text-3xl font-bold uppercase tracking-wide text-gray-800">Statement of Account</h1><p className="text-gray-500 mt-1">Ledger Connect</p></div><div className="text-right"><p className="text-sm text-gray-500">Date</p><p className="font-bold text-lg">{new Date(reportData.date).toLocaleDateString()}</p></div></div>
                              <div className="flex justify-between mb-8"><div className="w-1/2"><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Bill To</p><h2 className="text-xl font-bold">{reportData.customer.name}</h2><p className="text-gray-600">{reportData.customer.phone}</p><p className="text-gray-600">{reportData.customer.address}</p></div><div className="w-1/3 bg-gray-50 p-4 rounded border border-gray-200"><p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Amount Due</p><p className="text-2xl font-bold text-red-600">₱{reportData.grandTotal.toLocaleString()}</p></div></div>
                              <table className="w-full text-sm mb-8"><thead><tr className="border-b-2 border-gray-200"><th className="text-left py-2 font-bold text-gray-600">Date</th><th className="text-left py-2 font-bold text-gray-600">Description</th><th className="text-right py-2 font-bold text-gray-600">Charge</th><th className="text-right py-2 font-bold text-gray-600">Payment</th><th className="text-right py-2 font-bold text-gray-600">Balance</th></tr></thead><tbody className="divide-y divide-gray-100">{reportData.transactions.map((t, idx) => (<tr key={idx} className={t.isHeader ? 'bg-gray-50 font-medium' : ''}><td className="py-2.5">{new Date(t.date).toLocaleDateString()}</td><td className="py-2.5"><span className={t.isHeader ? 'font-bold text-gray-800' : ''}>{t.desc}</span></td><td className="py-2.5 text-right">{t.debit > 0 ? `₱${t.debit.toLocaleString()}` : '-'}</td><td className="py-2.5 text-right">{t.credit > 0 ? `(₱${t.credit.toLocaleString()})` : '-'}</td><td className="py-2.5 text-right font-bold text-gray-700">₱{t.balance.toLocaleString()}</td></tr>))}</tbody><tfoot className="border-t-2 border-gray-800"><tr><td colSpan={4} className="py-4 text-right font-bold text-lg">Ending Balance</td><td className="py-4 text-right font-bold text-lg text-red-600">₱{reportData.grandTotal.toLocaleString()}</td></tr></tfoot></table>
                              <div className="mt-12 text-center text-sm text-gray-500 border-t border-gray-100 pt-6"><p className="italic mb-2">Thank you for your business!</p></div>
                          </div>
+
+                         {/* THERMAL PRINT VIEW (Visible on Print Only) */}
+                         <div id="thermal-receipt" className="hidden printable-content">
+                            <div className="print-center">
+                                <h2 className="print-bold" style={{ fontSize: '16px', margin: '5px 0' }}>LEDGER CONNECT</h2>
+                                <div style={{ fontSize: '10px', marginBottom: '5px' }}>Statement of Account</div>
+                            </div>
+                            <div className="print-dashed"></div>
+                            <div className="print-row"><span>Date:</span><span>{new Date(reportData.date).toLocaleDateString()}</span></div>
+                            <div className="print-row"><span>Customer:</span><span>{reportData.customer.name}</span></div>
+                            <div className="print-dashed"></div>
+                            
+                            {/* Compact Table for Thermal */}
+                            <div style={{fontSize: '10px'}}>
+                                {reportData.transactions.map((t, i) => (
+                                    <div key={i} style={{marginBottom: '4px'}}>
+                                    {t.isHeader ? (
+                                        <div style={{fontWeight:'bold', marginTop:'5px'}}>{t.desc}</div>
+                                    ) : (
+                                        <>
+                                            <div style={{display:'flex', justifyContent:'space-between'}}>
+                                                <span>{new Date(t.date).toLocaleDateString(undefined, {month:'numeric', day:'numeric'})} {t.desc.substring(0,15)}</span>
+                                                <span>{t.debit > 0 ? `+${t.debit}` : `-${t.credit}`}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="print-dashed"></div>
+                            <div className="print-row print-bold" style={{ fontSize: '14px' }}>
+                                <span>TOTAL DUE</span>
+                                <span>P {reportData.grandTotal.toLocaleString()}</span>
+                            </div>
+                            <div className="print-center" style={{ marginTop: '15px', fontSize: '10px' }}>
+                                Generated by Ledger Connect
+                            </div>
+                        </div>
                      </div>
                 </div>
             )}
