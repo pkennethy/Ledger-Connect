@@ -3,6 +3,7 @@ import { Save, Bell, Globe, Shield, Database, User as UserIcon, Mail, Camera, Do
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, SystemSettings, User, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
+import { CONFIG } from '../config';
 
 interface PageProps {
     lang: Language;
@@ -731,6 +732,10 @@ create policy "Public Access Repayments" on public.repayments for all using (tru
                     )}
 
                 </div>
+            </div>
+            
+            <div className="text-center text-xs text-gray-400 py-4">
+                Ledger Connect v{CONFIG.APP_VERSION}
             </div>
         </div>
     );

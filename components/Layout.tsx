@@ -21,6 +21,7 @@ import { DICTIONARY, Language, User, UserRole } from '../types';
 import { AdBanner } from './AdBanner';
 import { MockService } from '../services/mockData';
 import { useToast } from '../context/ToastContext';
+import { CONFIG } from '../config';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -202,6 +203,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
               <LogOut size={18} className="mr-2" />
               {t.logout}
             </button>
+            <p className="text-[10px] text-center text-gray-400 mt-2 font-mono">v{CONFIG.APP_VERSION}</p>
           </div>
         </div>
       </aside>

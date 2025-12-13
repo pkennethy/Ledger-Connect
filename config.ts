@@ -1,4 +1,5 @@
 export const CONFIG = {
+  APP_VERSION: '1.0.0',
   SUPABASE: {
     // Replace these with your actual Supabase project details
     // You can find them in Supabase Dashboard → Settings → API

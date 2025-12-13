@@ -4,6 +4,7 @@ import { MockService } from '../services/mockData';
 import { User, DICTIONARY, Language, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
 import { AdBanner } from '../components/AdBanner';
+import { CONFIG } from '../config';
 
 interface LoginProps {
     onLogin: (user: User) => void;
@@ -267,9 +268,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                     )}
 
                     <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                        <button onClick={handleResetData} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                        <button onClick={handleResetData} className="text-xs text-gray-400 hover:text-gray-600 underline block w-full mb-2">
                             Trouble logging in? Reset App Data
                         </button>
+                        <span className="text-[10px] text-gray-300 font-mono">v{CONFIG.APP_VERSION}</span>
                     </div>
                 </div>
             </div>
