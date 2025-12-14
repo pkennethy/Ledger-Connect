@@ -74,6 +74,7 @@
         }
 
         .printable-content {
+          display: block !important; /* Override display:none from 'hidden' class */
           position: absolute;
           left: 0;
           top: 0;
@@ -89,8 +90,9 @@
           z-index: 9999;
         }
 
-        /* Hide Ad Banner and other fixed UI elements specifically */
-        .fixed, header, aside, .no-print {
+        /* Hide Ad Banner and other UI elements specifically. 
+           NOTE: Removed .fixed from here to allow printing content inside fixed modals */
+        header, aside, .no-print {
             display: none !important;
         }
         

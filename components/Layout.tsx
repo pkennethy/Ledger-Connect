@@ -268,7 +268,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
       </div>
 
       {/* Mobile Bottom Navigation (Fixed above Ad Banner) */}
-      <div className="lg:hidden fixed bottom-[60px] left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-[60px] z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+      <div className="lg:hidden fixed bottom-[60px] left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-[60px] z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] print:hidden">
          {mobilePrimaryItems.map(item => {
              const isActive = location.pathname === item.path;
              return (
