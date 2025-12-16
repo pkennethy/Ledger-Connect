@@ -36,6 +36,7 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     // UI View State
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
+    const [mainDateFilter, setMainDateFilter] = useState(''); // NEW: Global Date Filter
     const [expandedTxnId, setExpandedTxnId] = useState<string | null>(null);
     const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
     
@@ -153,6 +154,29 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         shopPage * SHOP_ITEMS_PER_PAGE
     );
 
+    // Helper functions moved up for reuse
+    const getLocalDateFromISO_Inner = (isoDate: string) => {
+        const d = new Date(isoDate);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const calculateHistoricalTotal = (customerId: string, dateLimit: string) => {
+        const rawDebts = MockService.getDebts(customerId);
+        const rawPayments = MockService.getRepayments(customerId);
+
+        // Filter all transactions strictly BEFORE or ON the dateLimit
+        const debtsUntilDate = rawDebts.filter(d => getLocalDateFromISO_Inner(d.createdAt) <= dateLimit);
+        const paymentsUntilDate = rawPayments.filter(p => getLocalDateFromISO_Inner(p.timestamp) <= dateLimit);
+
+        const totalDebt = debtsUntilDate.reduce((sum, d) => sum + d.amount, 0);
+        const totalPaid = paymentsUntilDate.reduce((sum, p) => sum + p.amount, 0);
+
+        return totalDebt - totalPaid;
+    };
+
     // Group debts by customer
     const customerDebts = visibleCustomers.map(cust => {
         const debts = allDebts.filter(d => d.customerId === cust.id);
@@ -164,10 +188,17 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
             categories[d.category].push(d);
         });
 
+        // Determine displayed debt based on global filter
+        let displayDebt = cust.totalDebt;
+        if (mainDateFilter) {
+            displayDebt = calculateHistoricalTotal(cust.id, mainDateFilter);
+        }
+
         return {
             ...cust,
             debts, // All raw debts for this customer
-            categories // Grouped by category (legacy/repay use)
+            categories, // Grouped by category (legacy/repay use)
+            displayDebt // The dynamic balance based on filter
         };
     });
 
@@ -175,7 +206,8 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
 
     const handleCustomerClick = (wrapper: any) => {
         setSelectedDetailCustomer(wrapper);
-        setDetailDateFilter(getTodayString()); // Reset date filter to Today on open
+        // If there's a global filter, use it. Otherwise default to today.
+        setDetailDateFilter(mainDateFilter || getTodayString()); 
         setExpandedTxnId(null); // Reset expanded row
     };
 
@@ -183,20 +215,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         const debts = MockService.getDebts(customerId);
         // Sum of all unpaid amounts
         return debts.reduce((acc, d) => acc + (d.amount - d.paidAmount), 0);
-    };
-
-    const calculateHistoricalTotal = (customerId: string, dateLimit: string) => {
-        const rawDebts = MockService.getDebts(customerId);
-        const rawPayments = MockService.getRepayments(customerId);
-
-        // Filter all transactions strictly BEFORE or ON the dateLimit
-        const debtsUntilDate = rawDebts.filter(d => getLocalDateFromISO(d.createdAt) <= dateLimit);
-        const paymentsUntilDate = rawPayments.filter(p => getLocalDateFromISO(p.timestamp) <= dateLimit);
-
-        const totalDebt = debtsUntilDate.reduce((sum, d) => sum + d.amount, 0);
-        const totalPaid = paymentsUntilDate.reduce((sum, p) => sum + p.amount, 0);
-
-        return totalDebt - totalPaid;
     };
 
     // --- DRAG AND DROP HANDLERS ---
@@ -690,7 +708,24 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                         <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">{t.debts}<span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">{customerDebts.length}</span></h2>
                     </div>
                     <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
-                        <div className="relative flex-1 xl:w-64"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} /><input type="text" placeholder="Search customers..." className="w-full pl-9 pr-4 py-2 text-sm rounded-full bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                        <div className="relative flex-1 xl:w-48"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} /><input type="text" placeholder="Search customers..." className="w-full pl-9 pr-4 py-2 text-sm rounded-full bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                        
+                        {/* GLOBAL DATE FILTER */}
+                        <div className="relative xl:w-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2">
+                            <Calendar size={16} className="text-gray-400 ml-1" />
+                            <input 
+                                type="date" 
+                                className="bg-transparent border-none text-sm py-2 text-gray-700 dark:text-white focus:ring-0 outline-none w-32" 
+                                value={mainDateFilter} 
+                                onChange={(e) => setMainDateFilter(e.target.value)} 
+                            />
+                            {mainDateFilter && (
+                                <button onClick={() => setMainDateFilter('')} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full">
+                                    <X size={14} className="text-gray-500" />
+                                </button>
+                            )}
+                        </div>
+
                         <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
                             <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}><LayoutList size={18} /></button>
                             <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}><LayoutGrid size={18} /></button>
@@ -705,10 +740,10 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                  <div className="flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 min-h-[300px]"><UserIcon size={48} className="mb-2 opacity-50" /><p>No customers found</p></div>
             ) : viewMode === 'list' ? (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700"><tr><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Debt</th><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th></tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{customerDebts.map(cust => (<tr key={cust.id} onClick={() => handleCustomerClick(cust)} className="hover:bg-blue-50/30 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"><td className="px-4 py-2 flex items-center"><img src={cust.avatarUrl} className="w-8 h-8 rounded-full border border-gray-100 mr-3" alt="" /><div><div className="font-semibold text-gray-900 dark:text-gray-100">{cust.name}</div><div className="text-xs text-gray-500">{cust.debts.length} records</div></div></td><td className="px-4 py-2 text-right"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cust.totalDebt > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'}`}>₱{cust.totalDebt.toLocaleString()}</span></td><td className="px-4 py-2 text-right"><button onClick={(e) => { e.stopPropagation(); handleOpenRepay(cust.id); }} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700">Repay</button></td></tr>))}</tbody></table></div>
+                    <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700"><tr><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">{mainDateFilter ? 'Historical Debt' : 'Total Debt'}</th><th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th></tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{customerDebts.map(cust => (<tr key={cust.id} onClick={() => handleCustomerClick(cust)} className="hover:bg-blue-50/30 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"><td className="px-4 py-2 flex items-center"><img src={cust.avatarUrl} className="w-8 h-8 rounded-full border border-gray-100 mr-3" alt="" /><div><div className="font-semibold text-gray-900 dark:text-gray-100">{cust.name}</div><div className="text-xs text-gray-500">{cust.debts.length} records</div></div></td><td className="px-4 py-2 text-right"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cust.displayDebt > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'}`}>₱{cust.displayDebt.toLocaleString()}</span>{mainDateFilter && <div className="text-[9px] text-gray-400 mt-0.5">As of {mainDateFilter}</div>}</td><td className="px-4 py-2 text-right"><button onClick={(e) => { e.stopPropagation(); handleOpenRepay(cust.id); }} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700">Repay</button></td></tr>))}</tbody></table></div>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">{customerDebts.map(cust => (<div key={cust.id} onClick={() => handleCustomerClick(cust)} className="relative aspect-square bg-gray-200 rounded-xl overflow-hidden group shadow-sm cursor-pointer"><img src={cust.avatarUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt={cust.name} /><div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" /><div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10"><span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm">{cust.debts.length} Trans.</span></div><div className={`absolute top-2 left-2 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm z-10 uppercase tracking-wider ${cust.totalDebt > 0 ? 'bg-red-600/90' : 'bg-green-600/90'}`}>{cust.totalDebt > 0 ? `Due: ₱${cust.totalDebt.toLocaleString()}` : 'Clean'}</div><div className="absolute bottom-0 left-0 w-full p-3 flex items-end justify-between gap-2 z-10"><div className="flex-1 min-w-0"><div className="text-white font-bold text-lg leading-none mb-1 drop-shadow-md truncate">{cust.name}</div><div className="flex items-center text-white/80 text-[10px] font-medium"><Phone size={10} className="mr-1" />{cust.phone}</div></div><button onClick={(e) => { e.stopPropagation(); handleOpenRepay(cust.id); }} className="bg-white/20 hover:bg-white/30 text-white border border-white/40 p-2 rounded-full backdrop-blur-md shadow-lg transition-all active:scale-95 shrink-0"><Wallet size={18} strokeWidth={3} /></button></div></div>))}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">{customerDebts.map(cust => (<div key={cust.id} onClick={() => handleCustomerClick(cust)} className="relative aspect-square bg-gray-200 rounded-xl overflow-hidden group shadow-sm cursor-pointer"><img src={cust.avatarUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt={cust.name} /><div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" /><div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10"><span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm">{cust.debts.length} Trans.</span></div><div className={`absolute top-2 left-2 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm z-10 uppercase tracking-wider ${cust.displayDebt > 0 ? 'bg-red-600/90' : 'bg-green-600/90'}`}>{cust.displayDebt > 0 ? `Due: ₱${cust.displayDebt.toLocaleString()}` : 'Clean'}</div><div className="absolute bottom-0 left-0 w-full p-3 flex items-end justify-between gap-2 z-10"><div className="flex-1 min-w-0"><div className="text-white font-bold text-lg leading-none mb-1 drop-shadow-md truncate">{cust.name}</div><div className="flex items-center text-white/80 text-[10px] font-medium"><Phone size={10} className="mr-1" />{cust.phone}</div></div><button onClick={(e) => { e.stopPropagation(); handleOpenRepay(cust.id); }} className="bg-white/20 hover:bg-white/30 text-white border border-white/40 p-2 rounded-full backdrop-blur-md shadow-lg transition-all active:scale-95 shrink-0"><Wallet size={18} strokeWidth={3} /></button></div></div>))}</div>
             )}
 
             {/* --- CUSTOMER LEDGER MODAL --- */}
