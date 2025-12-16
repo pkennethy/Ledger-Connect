@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, FileText, ChevronDown, ChevronRight, Plus, X, Wallet, AlertCircle, History, Calendar, Mail, PenTool, ShoppingBag, LayoutGrid, LayoutList, Phone, User as UserIcon, Clock, ArrowRight as ArrowIcon, ArrowDownLeft, ArrowUpRight, Printer, Download, MessageSquare, Minus, Trash2, ChevronLeft, ChevronDown as ChevronDownIcon, ChevronUp } from 'lucide-react';
+import { Search, FileText, ChevronDown, ChevronRight, Plus, X, Wallet, AlertCircle, History, Calendar, Mail, PenTool, ShoppingBag, LayoutGrid, LayoutList, Phone, User as UserIcon, Clock, ArrowRight as ArrowIcon, ArrowDownLeft, ArrowUpRight, Printer, Download, MessageSquare, Minus, Trash2, ChevronLeft, ChevronDown as ChevronDownIcon, ChevronUp, GripVertical } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, DebtRecord, DebtStatus, Customer, Product, User, UserRole, RepaymentRecord } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -37,6 +37,7 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedTxnId, setExpandedTxnId] = useState<string | null>(null);
+    const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
     
     // Modal States
     const [showAddModal, setShowAddModal] = useState(false);
@@ -198,6 +199,46 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         return totalDebt - totalPaid;
     };
 
+    // --- DRAG AND DROP HANDLERS ---
+    const handleDragStart = (e: React.DragEvent, debtId: string) => {
+        e.stopPropagation();
+        e.dataTransfer.setData('text/plain', debtId);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e: React.DragEvent, category: string) => {
+        e.preventDefault(); 
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (dragOverCategory !== category) {
+            setDragOverCategory(category);
+        }
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.currentTarget.contains(e.relatedTarget as Node)) {
+            return;
+        }
+        setDragOverCategory(null);
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetCategory: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOverCategory(null);
+        
+        const debtId = e.dataTransfer.getData('text/plain');
+        
+        if (debtId && targetCategory) {
+            await MockService.updateDebtCategory(debtId, targetCategory);
+            showToast(`Moved to ${targetCategory}`, 'success');
+            setRefresh(prev => prev + 1);
+        }
+    };
+
     // --- RENDER HELPERS ---
     
     // JOURNAL ENTRY LOGIC (Categorized)
@@ -228,10 +269,8 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                             const items = d.items || [];
                             if (items.length > 0) {
                                 if (items.length === 1) {
-                                    // Single item: Show name and quantity inline
                                     description = `${items[0].productName} (x${items[0].quantity})`;
                                 } else {
-                                    // Multiple items: Show summary
                                     description = `${items[0].productName} +${items.length - 1} items`;
                                 }
                             }
@@ -255,7 +294,7 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                             debit: 0, 
                             credit: p.amount, 
                             type: 'PAYMENT',
-                            items: [] // Payments don't have items
+                            items: [] 
                         }))
                     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -278,11 +317,22 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                         displayLedger = [...fullLedger].reverse();
                     }
 
-                    if (displayLedger.length === 0 && !showStartBal) return null;
+                    if (displayLedger.length === 0) {
+                        if (!showStartBal) return null;
+                        if (Math.abs(startBal) < 0.01) return null;
+                    }
+
+                    const isDragTarget = dragOverCategory === cat;
 
                     return (
-                        <div key={cat} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div 
+                            key={cat} 
+                            className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border transition-all duration-200 overflow-hidden ${isDragTarget ? 'border-2 border-dashed border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-[1.01]' : 'border-gray-200 dark:border-gray-700'}`}
+                            onDragOver={(e) => handleDragOver(e, cat)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, cat)}
+                        >
+                            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center pointer-events-none">
                                 <div className="flex items-center gap-2">
                                     <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
                                     <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wider flex items-center gap-2">
@@ -311,14 +361,23 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                                          )}
                                          {displayLedger.map(tx => {
                                              const isExpandable = tx.items && tx.items.length > 1;
+                                             const isDraggable = tx.type === 'DEBT';
+                                             
                                              return (
                                                  <React.Fragment key={tx.id}>
                                                      <tr 
+                                                        draggable={isDraggable}
+                                                        onDragStart={(e) => handleDragStart(e, tx.id)}
                                                         onClick={() => isExpandable ? setExpandedTxnId(expandedTxnId === tx.id ? null : tx.id) : null}
-                                                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group ${isExpandable ? 'cursor-pointer' : ''} ${expandedTxnId === tx.id ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}
+                                                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group ${isExpandable ? 'cursor-pointer' : ''} ${expandedTxnId === tx.id ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''} ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                                      >
                                                          <td className="px-4 py-2 text-xs text-gray-500"><div>{new Date(tx.date).toLocaleDateString()}</div><div className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">{new Date(tx.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></td>
-                                                         <td className="px-4 py-2 text-gray-700 dark:text-gray-300 flex items-center">
+                                                         <td className="px-4 py-2 text-gray-700 dark:text-gray-300 flex items-center relative">
+                                                             {isDraggable && (
+                                                                 <div className="absolute left-0 opacity-0 group-hover:opacity-50 text-gray-300 -ml-3 cursor-grab">
+                                                                     <GripVertical size={14} />
+                                                                 </div>
+                                                             )}
                                                              {isExpandable && (
                                                                  expandedTxnId === tx.id ? <ChevronUp size={12} className="mr-2 text-gray-400" /> : <ChevronDownIcon size={12} className="mr-2 text-gray-400" />
                                                              )}
@@ -328,7 +387,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                                                          <td className="px-4 py-2 text-right font-mono text-green-600 bg-green-50/10">{tx.credit > 0 ? `₱${tx.credit.toLocaleString()}` : ''}</td>
                                                          <td className="px-4 py-2 text-right font-mono font-medium text-gray-900 dark:text-gray-100">₱{tx.balance.toLocaleString()}</td>
                                                      </tr>
-                                                     {/* EXPANDED DETAILS ROW (Only for Multi-Item) */}
                                                      {expandedTxnId === tx.id && isExpandable && (
                                                          <tr className="bg-gray-50/50 dark:bg-gray-900/50 animate-in slide-in-from-top-1">
                                                              <td colSpan={5} className="p-3 pl-8">
@@ -384,7 +442,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     // --- ACTIONS ---
 
     const generateReport = (customerId: string) => {
-        // ... (Report generation logic same as before)
         try {
             const cust = customerDebts.find(c => c.id === customerId);
             if (!cust) { showToast('Customer not found', 'error'); return; }
@@ -439,22 +496,10 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
             const prevDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) < targetDate);
             const prevPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) < targetDate);
             const prevBal = prevDebts.reduce((sum, d) => sum + d.amount, 0) - prevPayments.reduce((sum, p) => sum + p.amount, 0);
+            
             const currDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) === targetDate);
             const currPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) === targetDate);
             
-            // Accumulate quantity AND total price per product
-            const productMap: Record<string, {qty: number, val: number}> = {};
-            currDebts.forEach(d => { 
-                d.items.forEach(i => { 
-                    const itemTotal = i.price * i.quantity; 
-                    if (!productMap[i.productName]) {
-                        productMap[i.productName] = { qty: 0, val: 0 };
-                    }
-                    productMap[i.productName].qty += i.quantity;
-                    productMap[i.productName].val += itemTotal;
-                }); 
-            });
-
             const totalNewCharges = currDebts.reduce((sum, d) => sum + d.amount, 0);
             const totalNewPayments = currPayments.reduce((sum, p) => sum + p.amount, 0);
             const endBal = prevBal + totalNewCharges - totalNewPayments;
@@ -463,17 +508,32 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                 breakdownLines.push(`[${cat}]`);
                 if (Math.abs(prevBal) > 0.01) breakdownLines.push(`  Beg: P${prevBal.toLocaleString()}`);
                 
-                // Sort by value and display with quantity
-                Object.entries(productMap)
-                    .sort((a,b) => b[1].val - a[1].val)
-                    .forEach(([name, data]) => {
-                        breakdownLines.push(`  + ${name} (x${data.qty}): P${data.val.toLocaleString()}`);
-                    });
+                // Timeline List
+                const timeline: {ts: number, text: string}[] = [];
 
-                // List individual payments instead of sum
-                currPayments.forEach(p => {
-                    breakdownLines.push(`  - Paid: P${p.amount.toLocaleString()}`);
+                // Add Debts to Timeline with Time
+                currDebts.forEach(d => { 
+                    const timeStr = new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    d.items.forEach(i => { 
+                        const itemTotal = i.price * i.quantity; 
+                        timeline.push({
+                            ts: new Date(d.createdAt).getTime(),
+                            text: `  ${timeStr} - ${i.productName} (x${i.quantity}): P${itemTotal.toLocaleString()}`
+                        });
+                    }); 
                 });
+
+                // Add Payments to Timeline with Time
+                currPayments.forEach(p => {
+                    const timeStr = new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    timeline.push({
+                        ts: new Date(p.timestamp).getTime(),
+                        text: `  ${timeStr} - Paid: P${p.amount.toLocaleString()}`
+                    });
+                });
+
+                // Sort by time and add to breakdown
+                timeline.sort((a, b) => a.ts - b.ts).forEach(t => breakdownLines.push(t.text));
 
                 breakdownLines.push(`  = End: P${endBal.toLocaleString()}`);
                 grandTotal += endBal;
@@ -484,6 +544,11 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         let message = `SOA\n${dateDisplay}\n\nTo: ${customer.name}\n\nTOTAL DUE: P${grandTotal.toLocaleString()}`;
         if (breakdown) message += `\n\nDETAILS:\n${breakdown}`;
         message += `\n\n- Ledger Connect`;
+        
+        // Append App Link (Clean Base URL)
+        const appLink = window.location.href.split('#')[0];
+        message += `\n\nLogin: ${appLink}`;
+
         const cleanPhone = customer.phone.replace(/[^0-9+]/g, '');
         const isiOS = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
         window.location.href = `sms:${cleanPhone}${isiOS ? '&' : '?'}body=${encodeURIComponent(message)}`;
@@ -592,7 +657,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     // --- MAIN RENDER ---
     
     if (!isAdmin && customerDebts.length > 0) {
-        // Customer View ... (Keeping as is, omitting for brevity in this specific file update request to focus on modal fix)
         const myself = customerDebts[0];
         const displayTotalDebt = detailDateFilter ? calculateHistoricalTotal(myself.id, detailDateFilter) : getLiveTotalDebt(myself.id);
         return (

@@ -489,6 +489,27 @@ export const MockService = {
     return debt;
   },
   
+  // NEW: Update Debt Category (for Drag & Drop)
+  updateDebtCategory: async (debtId: string, newCategory: string) => {
+      // Update Cache
+      const debt = CACHE_DEBTS.find(d => d.id === debtId);
+      if (debt) {
+          debt.category = newCategory;
+          // If items exist, ideally update their category too to keep data consistent
+          if (debt.items) {
+              debt.items.forEach(i => i.category = newCategory);
+          }
+          saveLocal('LC_DEBTS', CACHE_DEBTS);
+
+          if (isSupabaseConfigured()) {
+              await supabase.from('debts').update({ 
+                  category: newCategory,
+                  items: debt.items 
+              }).eq('id', debtId);
+          }
+      }
+  },
+  
   repayDebtByCategory: async (customerId: string, category: string, amount: number) => {
       const customerDebts = CACHE_DEBTS.filter(d => d.customerId === customerId && d.category === category && d.status !== DebtStatus.PAID);
       let remainingPayment = amount;
