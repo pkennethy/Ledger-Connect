@@ -523,6 +523,29 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             )}
 
+            {/* Pagination Controls */}
+            {filteredProducts.length > 0 && (
+                <div className="flex justify-between items-center pt-6 mt-2 border-t border-gray-100 dark:border-gray-700 shrink-0">
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="flex items-center px-4 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 shadow-sm transition-colors"
+                    >
+                        <ChevronLeft size={16} className="mr-1" /> Prev
+                    </button>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+                        Page <span className="text-gray-900 dark:text-white font-bold">{currentPage}</span> of <span className="text-gray-900 dark:text-white font-bold">{totalPages}</span>
+                    </span>
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="flex items-center px-4 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 shadow-sm transition-colors"
+                    >
+                        Next <ChevronRight size={16} className="ml-1" />
+                    </button>
+                </div>
+            )}
+
             {/* ... (Restock, Add Modals) ... */}
             
             {/* Quick Restock Modal (Small, Fast) */}

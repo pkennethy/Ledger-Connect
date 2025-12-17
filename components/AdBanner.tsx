@@ -90,7 +90,7 @@ export const AdBanner: React.FC = () => {
     if (!CONFIG.ADSTERRA.ENABLED || !isVisible) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-slate-900 border-t border-gray-800 z-[100] shadow-[0_-4px_10px_rgba(0,0,0,0.1)] overflow-hidden print:hidden flex justify-center items-center">
+        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-slate-900 border-t border-gray-800 z-[35] shadow-[0_-4px_10px_rgba(0,0,0,0.1)] overflow-hidden print:hidden flex justify-center items-center">
              
              {/* 1. AD LAYER (Top Priority Z-Index) */}
              <div ref={containerRef} className="absolute inset-0 z-20 flex items-center justify-center w-full h-full pointer-events-auto"></div>

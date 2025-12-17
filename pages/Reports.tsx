@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Language, DICTIONARY, User, UserRole } from '../types';
 import { MockService } from '../services/mockData';
@@ -12,54 +12,105 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
     const t = DICTIONARY[lang];
     const isAdmin = user.role === UserRole.ADMIN;
     
-    // Admin Data: Global
+    // Fetch Data
     const customers = MockService.getCustomers();
     const products = MockService.getProducts();
+    const orders = MockService.getOrders();
+    const allDebts = MockService.getDebts();
 
-    const monthlyData = [
-        { name: 'Jan', income: 4000, expense: 2400, profit: 1600 },
-        { name: 'Feb', income: 3000, expense: 1398, profit: 1602 },
-        { name: 'Mar', income: 2000, expense: 9800, profit: -7800 },
-        { name: 'Apr', income: 2780, expense: 3908, profit: -1128 },
-        { name: 'May', income: 1890, expense: 4800, profit: -2910 },
-        { name: 'Jun', income: 2390, expense: 3800, profit: -1410 },
-        { name: 'Jul', income: 6500, expense: 2000, profit: 4500 },
-        { name: 'Aug', income: 5100, expense: 2300, profit: 2800 },
-    ];
-    const topDebtors = [...customers]
-        .sort((a, b) => b.totalDebt - a.totalDebt)
-        .slice(0, 5)
-        .map(c => ({ name: c.name, debt: c.totalDebt }));
+    // --- CHART DATA CALCULATIONS ---
 
-    // Inventory Data (Low Stock Alert)
-    const lowStockProducts = products
-        .sort((a, b) => a.stock - b.stock)
-        .slice(0, 5)
-        .map(p => ({ name: p.name, stock: p.stock }));
+    // 1. Profit Analysis (Last 6 Months)
+    const monthlyData = useMemo(() => {
+        const data = [];
+        const today = new Date();
+        
+        for (let i = 5; i >= 0; i--) {
+            // Get date for i months ago
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthStr = d.toISOString().slice(0, 7); // YYYY-MM format
+            const monthName = d.toLocaleString('default', { month: 'short' });
 
-    // Customer Data: Personal
-    const myDebts = MockService.getDebts(user.id);
-    const debtsByCategory: Record<string, number> = {};
-    myDebts.forEach(d => {
-        debtsByCategory[d.category] = (debtsByCategory[d.category] || 0) + (d.amount - d.paidAmount);
-    });
-    
-    const customerCategoryData = Object.entries(debtsByCategory)
-        .filter(([_, value]) => value > 0)
-        .map(([name, value]) => ({ name, value }));
+            // Filter orders for this month (excluding cancelled)
+            const monthOrders = orders.filter(o => o.createdAt.startsWith(monthStr) && o.status !== 'CANCELLED');
 
-    // Default chart data fallback
-    const displayCategoryData = customerCategoryData.length > 0 ? customerCategoryData : [{ name: 'No Debt', value: 1 }];
-    
-    // Global Category Data (Mock)
-    const adminCategoryData = [
-        { name: 'Grains', value: 40000 },
-        { name: 'Fruits', value: 30000 },
-        { name: 'Canned', value: 30000 },
-        { name: 'Dry Goods', value: 20000 },
-    ];
+            let revenue = 0;
+            let cogs = 0; // Cost of Goods Sold
 
-    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+            monthOrders.forEach(order => {
+                revenue += order.totalAmount;
+                
+                // Calculate Cost based on current product cost (Snapshot would be better, but using current for simplicity)
+                order.items.forEach(item => {
+                    const product = products.find(p => p.id === item.productId);
+                    // Use product cost if available, otherwise assume 0 or estimate
+                    const unitCost = product ? product.cost : 0; 
+                    cogs += (unitCost * item.quantity);
+                });
+            });
+
+            data.push({
+                name: monthName,
+                income: revenue,
+                expense: cogs,
+                profit: revenue - cogs
+            });
+        }
+        return data;
+    }, [orders, products]);
+
+    // 2. Top Debtors Leaderboard
+    const topDebtors = useMemo(() => {
+        return [...customers]
+            .filter(c => c.totalDebt > 0)
+            .sort((a, b) => b.totalDebt - a.totalDebt)
+            .slice(0, 5)
+            .map(c => ({ name: c.name, debt: c.totalDebt }));
+    }, [customers]);
+
+    // 3. Inventory Data (Low Stock Alert)
+    const lowStockProducts = useMemo(() => {
+        return [...products]
+            .sort((a, b) => a.stock - b.stock)
+            .slice(0, 5)
+            .map(p => ({ name: p.name, stock: p.stock }));
+    }, [products]);
+
+    // 4. Global Debt Category Data (Admin)
+    const adminCategoryData = useMemo(() => {
+        const catMap: Record<string, number> = {};
+        allDebts.forEach(d => {
+            const outstanding = d.amount - d.paidAmount;
+            if (outstanding > 0) {
+                catMap[d.category] = (catMap[d.category] || 0) + outstanding;
+            }
+        });
+
+        const data = Object.entries(catMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value); // Sort biggest debt category first
+            
+        return data.length > 0 ? data : [{ name: 'No Debt', value: 1 }];
+    }, [allDebts]);
+
+    // 5. Personal Debt Category Data (Customer)
+    const customerCategoryData = useMemo(() => {
+        const myDebts = MockService.getDebts(user.id);
+        const debtsByCategory: Record<string, number> = {};
+        myDebts.forEach(d => {
+            const outstanding = d.amount - d.paidAmount;
+            if (outstanding > 0) {
+                debtsByCategory[d.category] = (debtsByCategory[d.category] || 0) + outstanding;
+            }
+        });
+        
+        const data = Object.entries(debtsByCategory)
+            .map(([name, value]) => ({ name, value }));
+
+        return data.length > 0 ? data : [{ name: 'Clean', value: 1 }];
+    }, [user.id, allDebts]); // Depend on allDebts so it updates when debts change
+
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
     if (isAdmin) {
         return (
@@ -68,7 +119,7 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
 
                 {/* Profit Analysis */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Profit Analysis (Income vs Expense vs Profit)</h3>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Financial Overview (Revenue vs Cost vs Profit)</h3>
                     <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={monthlyData}>
@@ -77,11 +128,12 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
                                 <YAxis tick={{fill: '#9ca3af'}} />
                                 <Tooltip 
                                     contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} 
-                                    cursor={{fill: '#f3f4f6'}} 
+                                    cursor={{fill: '#f3f4f6'}}
+                                    formatter={(value: number) => [`₱${value.toLocaleString()}`, '']}
                                 />
                                 <Legend />
-                                <Bar dataKey="income" fill="#3b82f6" name="Income" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="expense" fill="#ef4444" name="Costs" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="income" fill="#3b82f6" name="Revenue" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="expense" fill="#ef4444" name="Cost (COGS)" radius={[4, 4, 0, 0]} />
                                 <Bar dataKey="profit" fill="#10b981" name="Net Profit" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
@@ -91,54 +143,66 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Sales by Category */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Debt Composition by Category</h3>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={adminCategoryData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={100}
-                                        fill="#8884d8"
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
-                                        {adminCategoryData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Outstanding Debt Composition</h3>
+                        <div className="h-80 w-full flex justify-center">
+                            {adminCategoryData.length === 1 && adminCategoryData[0].name === 'No Debt' ? (
+                                <div className="flex items-center justify-center text-gray-400 h-full">No outstanding debts to analyze.</div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={adminCategoryData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            fill="#8884d8"
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        >
+                                            {adminCategoryData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Amount']} />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </div>
 
                     {/* Top Debtors Leaderboard */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Customer Debt Leaderboard</h3>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Top Debtors</h3>
                         <div className="h-80">
-                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={topDebtors} layout="vertical" margin={{ left: 40 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={100} tick={{fill: '#9ca3af', fontWeight: 500}} />
-                                    <Tooltip cursor={{fill: 'transparent'}} />
-                                    <Bar dataKey="debt" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={32} label={{ position: 'right', fill: '#9ca3af', fontSize: 12 }}>
-                                        {topDebtors.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : '#f59e0b'} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                            {topDebtors.length === 0 ? (
+                                <div className="flex items-center justify-center text-gray-400 h-full">No debtors found.</div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={topDebtors} layout="vertical" margin={{ left: 40, right: 20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={100} tick={{fill: '#9ca3af', fontWeight: 500}} />
+                                        <Tooltip 
+                                            cursor={{fill: 'transparent'}}
+                                            formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Debt']}
+                                        />
+                                        <Bar dataKey="debt" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={32} label={{ position: 'right', fill: '#9ca3af', fontSize: 12 }}>
+                                            {topDebtors.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : '#f59e0b'} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </div>
 
                     {/* Inventory Low Stock Alert */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 lg:col-span-2">
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Inventory Status (Lowest Stock Items)</h3>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Inventory Alert (Lowest Stock Items)</h3>
                         <div className="h-64">
                              <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={lowStockProducts} margin={{ left: 20, right: 20 }}>
@@ -161,6 +225,8 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
     }
 
     // Customer View
+    const totalMyDebt = MockService.getDebts(user.id).reduce((sum, d) => sum + (d.amount - d.paidAmount), 0);
+
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{t.my_debts} Analysis</h2>
@@ -168,15 +234,15 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">My Debt Breakdown</h3>
                 <div className="h-80 w-full flex justify-center">
-                    {customerCategoryData.length === 0 ? (
+                    {customerCategoryData.length === 1 && customerCategoryData[0].name === 'Clean' ? (
                         <div className="flex flex-col items-center justify-center text-gray-400">
-                             <p>No active debts to analyze.</p>
+                             <p>You have no outstanding debts. Great job!</p>
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
-                                    data={displayCategoryData}
+                                    data={customerCategoryData}
                                     cx="50%"
                                     cy="50%"
                                     innerRadius={80}
@@ -186,11 +252,11 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
                                     dataKey="value"
                                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                                 >
-                                    {displayCategoryData.map((entry, index) => (
+                                    {customerCategoryData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
+                                <Tooltip formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Amount']} />
                                 <Legend />
                             </PieChart>
                         </ResponsiveContainer>
@@ -200,8 +266,8 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
             
             <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl border border-blue-100 dark:border-blue-800 text-center">
                 <p className="text-gray-600 dark:text-gray-300 mb-2">Total Outstanding Balance</p>
-                <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
-                    ₱{myDebts.reduce((sum, d) => sum + (d.amount - d.paidAmount), 0).toLocaleString()}
+                <p className={`text-4xl font-bold ${totalMyDebt > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                    ₱{totalMyDebt.toLocaleString()}
                 </p>
             </div>
         </div>
