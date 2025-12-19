@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Delete, X, Check } from 'lucide-react';
 
@@ -44,7 +45,7 @@ export const NumpadModal: React.FC<NumpadModalProps> = ({ isOpen, initialValue, 
     const displayValue = valueStr || '0';
 
     return (
-        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pb-20 sm:pb-0">
+        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pb-[130px] sm:pb-0">
             {/* Backdrop click to close */}
             <div className="absolute inset-0" onClick={onClose}></div>
 

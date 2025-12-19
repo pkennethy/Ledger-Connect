@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
@@ -256,7 +257,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, lang, 
         </header>
 
         {/* Scrollable Content */}
-        {/* Padding bottom accounts for Ad Banner (60px) + Bottom Nav (60px on mobile) */}
+        {/* pb-[130px] = 60px (Banner) + 60px (Nav) + 10px spacing */}
         <main 
             ref={mainContentRef}
             className="flex-1 overflow-y-auto p-4 lg:p-6 pb-[130px] lg:pb-24 scroll-smooth bg-gray-50/50"

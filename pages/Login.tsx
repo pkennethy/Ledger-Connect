@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, ArrowRight, Shield, RefreshCw, AlertTriangle, UserX, Info } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { User, DICTIONARY, Language, UserRole } from '../types';
@@ -28,6 +28,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
     const [captchaInput, setCaptchaInput] = useState('');
     const [captchaCode, setCaptchaCode] = useState(generateCaptcha());
     
+    // Refs for Focus
+    const passwordRef = useRef<HTMLInputElement>(null);
+    const captchaRef = useRef<HTMLInputElement>(null);
+
     // Auth Context (Determined after Phone step)
     const [userExists, setUserExists] = useState(false);
     const [targetRole, setTargetRole] = useState<UserRole>(UserRole.CUSTOMER);
@@ -38,8 +42,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
             setCaptchaCode(generateCaptcha());
             setCaptchaInput('');
             setPassword('');
+            
+            // Critical: Trigger focus on the correct input after step transition
+            const timer = setTimeout(() => {
+                if (targetRole === UserRole.ADMIN) {
+                    passwordRef.current?.focus();
+                } else {
+                    captchaRef.current?.focus();
+                }
+            }, 150);
+            return () => clearTimeout(timer);
         }
-    }, [step]);
+    }, [step, targetRole]);
 
     const handlePhoneSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -53,20 +67,16 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
             const status = await MockService.checkUserStatus(phone);
             
             if (status.exists) {
-                // User exists (Created by Admin or previous Admin), allow login
                 setUserExists(true);
                 setTargetRole(status.role);
                 setStep('AUTH');
             } else {
-                // User does not exist
                 if (status.nextUserRole === UserRole.ADMIN) {
-                     // First user ever -> Allow Admin Setup
                      setUserExists(false);
                      setTargetRole(UserRole.ADMIN);
                      setStep('AUTH');
                      showToast('Welcome. Please set up the Admin account.', 'info');
                 } else {
-                     // Regular customer trying to sign up -> BLOCK
                      showToast('Account not found. Please ask the Admin to create your account.', 'error');
                 }
             }
@@ -104,18 +114,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
             
             if (user) {
                 window.location.hash = '/';
-                // PERSIST SESSION
                 localStorage.setItem('LC_CURRENT_USER', JSON.stringify(user));
                 onLogin(user);
                 showToast(isRegistering ? 'Account created successfully!' : `Welcome back, ${user.name}!`, 'success');
             }
         } catch (error: any) {
             let msg = error.message || 'Authentication failed';
-            
             if (msg.toLowerCase().includes('database error')) {
                 msg = 'Database Error: Please ensure you have run the SQL script.';
             }
-            
             showToast(msg, 'error');
         } finally {
             setLoading(false);
@@ -130,7 +137,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
     };
 
     const handleResetData = () => {
-        if(confirm('This will clear all local data. This helps if you are stuck in a login loop. Continue?')) {
+        if(confirm('This will clear all local data. Continue?')) {
             MockService.factoryReset();
         }
     };
@@ -171,6 +178,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                                     <input 
                                         type="tel"
                                         required
+                                        autoFocus
                                         placeholder="917 123 4567"
                                         value={phone}
                                         onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
@@ -201,6 +209,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                                         {userExists ? 'Enter Password' : 'Create Password'}
                                     </label>
                                     <input 
+                                        ref={passwordRef}
                                         type="password"
                                         required
                                         placeholder="••••••••"
@@ -228,6 +237,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">Enter Code</label>
                                         <input 
+                                            ref={captchaRef}
                                             type="tel"
                                             required
                                             maxLength={4}
@@ -255,15 +265,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                             >
                                 Change Number
                             </button>
-
-                            {!userExists && targetRole === UserRole.ADMIN && (
-                                <div className="flex items-start bg-amber-50 p-3 rounded-lg border border-amber-100 mt-4">
-                                    <AlertTriangle size={16} className="text-amber-600 mt-0.5 mr-2 shrink-0" />
-                                    <p className="text-xs text-amber-800 leading-relaxed">
-                                        <strong>Setup Tip:</strong> Ensure "Confirm Email" is disabled in your Supabase Auth settings, as this app uses phone numbers for login.
-                                    </p>
-                                </div>
-                            )}
                         </form>
                     )}
 
@@ -275,7 +276,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
                     </div>
                 </div>
             </div>
-            
             <AdBanner />
         </div>
     );

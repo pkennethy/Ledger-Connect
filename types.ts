@@ -25,6 +25,7 @@ export interface User {
   role: UserRole;
   avatarUrl?: string;
   email?: string;
+  password?: string;
 }
 
 export interface Customer {
