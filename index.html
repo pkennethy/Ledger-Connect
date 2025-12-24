@@ -20,11 +20,15 @@
                 300: '#93c5fd',
                 400: '#60a5fa',
                 500: '#3b82f6',
-                600: '#2563EB', // Business Blue
+                600: '#2563EB',
                 700: '#1d4ed8',
                 800: '#1e40af',
                 900: '#1e3a8a',
               }
+            },
+            boxShadow: {
+              'premium-dark': '0 10px 30px -10px rgba(0, 0, 0, 0.5)',
+              'glass-dark': 'inset 0 1px 1px 0 rgba(255, 255, 255, 0.05)'
             }
           }
         }
@@ -37,67 +41,57 @@
         height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
         background: #cbd5e1; 
         border-radius: 3px;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
+      .dark ::-webkit-scrollbar-thumb {
+        background: #334155; 
       }
+      
       body {
         -webkit-tap-highlight-color: transparent;
-        /* Removed padding-bottom here to rely on Layout.tsx main component */
       }
 
       /* GLOBAL PRINT STYLES - Optimized for Thermal Printers */
       @media print {
         @page {
           margin: 0;
-          size: auto; /* auto allows the printer driver to determine width */
+          size: auto;
         }
-
         body * {
           visibility: hidden;
         }
-        
-        /* Reset Body for Print */
         body {
           margin: 0;
           padding: 0;
-          background-color: white;
+          background-color: white !important;
+          color: black !important;
         }
-
-        /* Visible Content Area */
         .printable-content, .printable-content * {
           visibility: visible;
         }
-
         .printable-content {
-          display: block !important; /* Override display:none from 'hidden' class */
+          display: block !important;
           position: absolute;
           left: 0;
           top: 0;
-          width: 100%; /* Will adapt to paper width (58mm/80mm) */
-          max-width: 80mm; /* Constraint for larger papers */
+          width: 100%;
+          max-width: 80mm;
           margin: 0;
-          padding: 10px 5px; /* Minimal padding for thermal paper */
+          padding: 10px 5px;
           background: white;
           color: black;
-          font-family: 'Courier New', Courier, monospace; /* Monospace for alignment */
+          font-family: 'Courier New', Courier, monospace;
           font-size: 12px;
           line-height: 1.2;
           z-index: 9999;
         }
-
-        /* Hide Ad Banner and other UI elements specifically. 
-           NOTE: Removed .fixed from here to allow printing content inside fixed modals */
         header, aside, .no-print {
             display: none !important;
         }
-        
-        /* Print Utilities */
         .print-bold { font-weight: bold; }
         .print-center { text-align: center; }
         .print-right { text-align: right; }
@@ -121,21 +115,8 @@
 }
 </script>
   </head>
-  <body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+  <body class="bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(registration => {
-              console.log('SW registered: ', registration);
-            })
-            .catch(registrationError => {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
-    </script>
   </body>
 </html>

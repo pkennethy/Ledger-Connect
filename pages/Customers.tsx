@@ -33,6 +33,20 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
         email: ''
     });
 
+    // Memoized live balances for consistency
+    const customerBalances = useMemo(() => {
+        const debts = MockService.getDebts();
+        const payments = MockService.getRepayments();
+        const balances: Record<string, number> = {};
+        
+        MockService.getCustomers().forEach(c => {
+            const cDebts = debts.filter(d => d.customerId === c.id);
+            const cPayments = payments.filter(p => p.customerId === c.id);
+            balances[c.id] = Math.max(0, cDebts.reduce((s,d)=>s+d.amount,0) - cPayments.reduce((s,p)=>s+p.amount,0));
+        });
+        return balances;
+    }, [searchTerm, isModalOpen]); // Refresh when list might change
+
     // Memoized customer list filtering
     const filteredCustomers = useMemo(() => {
         const list = MockService.getCustomers().filter(c => c.role !== UserRole.ADMIN);
@@ -68,7 +82,6 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
         if (window.confirm('Are you sure you want to delete this customer?')) {
             await MockService.deleteCustomer(id);
             showToast('Customer deleted', 'success');
-            // Force re-render if using mock data without subscription
             setSearchTerm(prev => prev);
         }
     };
@@ -121,30 +134,33 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
             {/* Main Content: Grid or List View */}
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {paginatedCustomers.map(customer => (
-                        <div key={customer.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg hover:-translate-y-1 transition-all">
-                            <div className="flex items-center gap-4 mb-4">
-                                <img src={customer.avatarUrl} alt={customer.name} className="w-14 h-14 rounded-full border-2 border-gray-100 dark:border-gray-700 shadow-sm" />
-                                <div className="min-w-0">
-                                    <h4 className="font-bold text-gray-900 dark:text-white truncate text-lg">{customer.name}</h4>
-                                    <p className="text-sm text-gray-500 flex items-center gap-1.5"><Phone size={14} className="text-blue-500" /> {customer.phone}</p>
+                    {paginatedCustomers.map(customer => {
+                        const bal = customerBalances[customer.id] || 0;
+                        return (
+                            <div key={customer.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg hover:-translate-y-1 transition-all">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <img src={customer.avatarUrl} alt={customer.name} className="w-14 h-14 rounded-full border-2 border-gray-100 dark:border-gray-700 shadow-sm" />
+                                    <div className="min-w-0">
+                                        <h4 className="font-bold text-gray-900 dark:text-white truncate text-lg">{customer.name}</h4>
+                                        <p className="text-sm text-gray-500 flex items-center gap-1.5"><Phone size={14} className="text-blue-500" /> {customer.phone}</p>
+                                    </div>
                                 </div>
+                                <div className="space-y-3 mb-6">
+                                    <p className="text-xs text-gray-500 flex items-start gap-1.5"><MapPin size={14} className="text-gray-400 shrink-0" /> <span className="line-clamp-2">{customer.address}</span></p>
+                                    <div className="flex justify-between items-center bg-blue-50/50 dark:bg-gray-900/50 px-4 py-3 rounded-xl border border-blue-50 dark:border-gray-700">
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Due</span>
+                                        <span className="font-black text-red-600 text-lg">₱{bal.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                {isAdmin && (
+                                    <div className="flex gap-2 pt-2">
+                                        <button onClick={() => handleEdit(customer)} className="flex-1 py-2.5 text-sm font-black uppercase tracking-widest text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 rounded-xl transition-colors flex items-center justify-center gap-2"><Edit size={16} /> Edit</button>
+                                        <button onClick={() => handleDelete(customer.id)} className="p-2.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 rounded-xl transition-colors"><Trash2 size={18} /></button>
+                                    </div>
+                                )}
                             </div>
-                            <div className="space-y-3 mb-6">
-                                <p className="text-xs text-gray-500 flex items-start gap-1.5"><MapPin size={14} className="text-gray-400 shrink-0" /> <span className="line-clamp-2">{customer.address}</span></p>
-                                <div className="flex justify-between items-center bg-blue-50/50 dark:bg-gray-900/50 px-4 py-3 rounded-xl border border-blue-50 dark:border-gray-700">
-                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Due</span>
-                                    <span className="font-black text-red-600 text-lg">₱{customer.totalDebt.toLocaleString()}</span>
-                                </div>
-                            </div>
-                            {isAdmin && (
-                                <div className="flex gap-2 pt-2">
-                                    <button onClick={() => handleEdit(customer)} className="flex-1 py-2.5 text-sm font-black uppercase tracking-widest text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 rounded-xl transition-colors flex items-center justify-center gap-2"><Edit size={16} /> Edit</button>
-                                    <button onClick={() => handleDelete(customer.id)} className="p-2.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 rounded-xl transition-colors"><Trash2 size={18} /></button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -159,27 +175,30 @@ export const Customers: React.FC<PageProps> = ({ lang, user }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {paginatedCustomers.map(customer => (
-                                <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            <img src={customer.avatarUrl} alt="" className="w-10 h-10 rounded-full border dark:border-gray-600" />
-                                            <span className="font-bold text-gray-800 dark:text-gray-200">{customer.name}</span>
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-sm text-gray-600 dark:text-gray-400 font-mono">{customer.phone}</td>
-                                    <td className="p-4 text-sm text-gray-500 truncate max-w-[200px]">{customer.address}</td>
-                                    <td className="p-4 text-right font-black text-red-600 font-mono text-lg">₱{customer.totalDebt.toLocaleString()}</td>
-                                    {isAdmin && (
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => handleEdit(customer)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={18} /></button>
-                                                <button onClick={() => handleDelete(customer.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                            {paginatedCustomers.map(customer => {
+                                const bal = customerBalances[customer.id] || 0;
+                                return (
+                                    <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <img src={customer.avatarUrl} alt="" className="w-10 h-10 rounded-full border dark:border-gray-600" />
+                                                <span className="font-bold text-gray-800 dark:text-gray-200">{customer.name}</span>
                                             </div>
                                         </td>
-                                    )}
-                                </tr>
-                            ))}
+                                        <td className="p-4 text-sm text-gray-600 dark:text-gray-400 font-mono">{customer.phone}</td>
+                                        <td className="p-4 text-sm text-gray-500 truncate max-w-[200px]">{customer.address}</td>
+                                        <td className="p-4 text-right font-black text-red-600 font-mono text-lg">₱{bal.toLocaleString()}</td>
+                                        {isAdmin && (
+                                            <td className="p-4 text-right">
+                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => handleEdit(customer)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={18} /></button>
+                                                    <button onClick={() => handleDelete(customer.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

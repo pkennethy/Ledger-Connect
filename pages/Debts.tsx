@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, FileText, ChevronDown, ChevronRight, Plus, X, Wallet, AlertCircle, History, Calendar, Mail, PenTool, ShoppingBag, LayoutGrid, LayoutList, Phone, User as UserIcon, Clock, ArrowRight as ArrowIcon, ArrowDownLeft, ArrowUpRight, Printer, Download, MessageSquare, Minus, Trash2, ChevronLeft, ChevronDown as ChevronDownIcon, ChevronUp, GripVertical, Check, ShoppingCart, Package, List, Grip, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, X, Wallet, Calendar, Phone, Printer, MessageSquare, Minus, Trash2, ChevronLeft, ChevronRight, ShoppingCart, List, ShieldAlert, Eye, EyeOff, Layers, ArrowUpRight, ArrowDownLeft, PackageSearch, ClipboardList, CheckCircle, Filter, LayoutGrid, LayoutList, Grab } from 'lucide-react';
 import { MockService } from '../services/mockData';
-import { Language, DICTIONARY, DebtRecord, DebtStatus, Customer, Product, User, UserRole, RepaymentRecord, OrderItem } from '../types';
+import { Language, DICTIONARY, DebtStatus, Customer, Product, User, UserRole, OrderItem } from '../types';
 import { useToast } from '../context/ToastContext';
 import { NumpadModal } from '../components/NumpadModal';
 
@@ -11,6 +11,8 @@ interface PageProps {
     user: User;
 }
 
+type WorkspaceTab = 'CATALOG' | 'QUEUE';
+
 export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     const t = DICTIONARY[lang];
     const isAdmin = user.role === UserRole.ADMIN;
@@ -18,172 +20,112 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
 
     // --- UI HELPERS ---
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
-
-    const getCardStyle = (index: number) => {
-        const styles = [
-            'bg-gradient-to-br from-pink-500 to-rose-600',
-            'bg-gradient-to-br from-blue-500 to-blue-700',
-            'bg-gradient-to-br from-orange-400 to-orange-600',
-            'bg-gradient-to-br from-purple-500 to-purple-700',
-            'bg-gradient-to-br from-emerald-500 to-teal-700',
-            'bg-gradient-to-br from-cyan-500 to-blue-600',
-            'bg-gradient-to-br from-indigo-500 to-indigo-700',
-            'bg-gradient-to-br from-rose-400 to-red-600',
-        ];
-        return styles[index % styles.length];
-    };
-
-    const getTodayString = () => {
-        const d = new Date();
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
     const getLocalDateFromISO = (isoDate: string) => {
         const d = new Date(isoDate);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
-    // UI View State
+    // --- MAIN VIEW STATE ---
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
-    const [mainDateFilter, setMainDateFilter] = useState(''); 
-    
-    // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 12;
 
-    // Modal States
+    // --- DETAIL VIEW STATE ---
+    const [selectedDetailCustomer, setSelectedDetailCustomer] = useState<Customer | null>(null);
+    const [detailSearch, setDetailSearch] = useState('');
+    const [detailFilterDate, setDetailFilterDate] = useState(new Date().toISOString().split('T')[0]);
+    const [ledgerPage, setLedgerPage] = useState(1);
+    const ledgerItemsPerPage = 10;
+
+    // --- DRAG AND DROP STATE ---
+    const [draggedTxn, setDraggedTxn] = useState<{id: string, type: 'DEBT' | 'PAYMENT', category: string} | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [activeDropTarget, setActiveDropTarget] = useState<string | null>(null);
+
+    // --- MODAL STATES ---
     const [showAddModal, setShowAddModal] = useState(false);
-    const [addDebtStep, setAddDebtStep] = useState<'select' | 'assign'>('select');
-    const [shopSubTab, setShopSubTab] = useState<'products' | 'cart'>('products');
+    const [modalStep, setModalStep] = useState<'SELECT_CUSTOMER' | 'WORKSPACE'>('SELECT_CUSTOMER');
+    const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('CATALOG');
+    const [modalProdPage, setModalProdPage] = useState(1);
+    const modalProdItemsPerPage = 15;
+    const [modalCustPage, setModalCustPage] = useState(1);
+    const modalCustItemsPerPage = 12;
+    const [modalQueuePage, setModalQueuePage] = useState(1);
+    const modalQueueItemsPerPage = 5;
     const [showRepayModal, setShowRepayModal] = useState(false);
+    const [repayCustomer, setRepayCustomer] = useState<string>('');
+    const [repayAmount, setRepayAmount] = useState<string>('');
+    const [repayCategory, setRepayCategory] = useState<string>('');
     const [viewingTxnItems, setViewingTxnItems] = useState<any | null>(null);
-    
-    // Delete Confirmation State
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{id: string, type: 'DEBT' | 'PAYMENT'} | null>(null);
     const [deletePassInput, setDeletePassInput] = useState('');
     const [showDeletePass, setShowDeletePass] = useState(false);
-
-    // Numpad State
     const [showNumpad, setShowNumpad] = useState(false);
     const [numpadTargetId, setNumpadTargetId] = useState<string | null>(null);
     const [numpadInitialValue, setNumpadInitialValue] = useState(1);
+    const [refresh, setRefresh] = useState(refreshCount => refreshCount + 1);
 
-    // Detail View State 
-    const [selectedDetailCustomer, setSelectedDetailCustomer] = useState<any | null>(null);
-    const [detailDateFilter, setDetailDateFilter] = useState(getTodayString());
-    
-    // SOA Modal State
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [reportData, setReportData] = useState<{
-        customer: Customer, 
-        categories: any[], 
-        grandTotal: number, 
-        date: string
-    } | null>(null);
-
-    const [refresh, setRefresh] = useState(0);
-
-    // Form States
-    const [addDebtMode, setAddDebtMode] = useState<'product' | 'manual'>('product');
-    const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [selectedProducts, setSelectedProducts] = useState<Array<{product: Product, qty: number}>>([]);
-    const [debtAssignments, setDebtAssignments] = useState<Record<string, string>>({}); // ProductID -> Category
+    const [debtAssignments, setDebtAssignments] = useState<Record<string, string>>({}); 
     const [debtDate, setDebtDate] = useState('');
-    const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [shopSearch, setShopSearch] = useState('');
     const [shopCategory, setShopCategory] = useState('All');
-    const [manualForm, setManualForm] = useState({ amount: '', category: '', description: '' });
-    const [repayCustomer, setRepayCustomer] = useState<string>('');
-    const [repayCategory, setRepayCategory] = useState<string>('');
-    const [repayAmount, setRepayAmount] = useState<string>('');
-
-    // --- DRAG AND DROP STATE ---
-    const [draggedTxnId, setDraggedTxnId] = useState<string | null>(null);
-    const [draggedTxnType, setDraggedTxnType] = useState<'DEBT' | 'PAYMENT' | null>(null);
-    const [dropOverCategory, setDropOverCategory] = useState<string | null>(null);
-    const [isOverTrash, setIsOverTrash] = useState(false);
-
-    // --- EFFECTS ---
-    useEffect(() => {
-        setAllProducts(MockService.getProducts());
-    }, [refresh]);
-
-    useEffect(() => {
-        if (showAddModal) {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            setDebtDate(now.toISOString().slice(0, 16));
-            setAddDebtStep('select');
-            setShopSubTab('products');
-        }
-    }, [showAddModal]);
-
-    useEffect(() => {
-        if (selectedDetailCustomer) {
-            setDetailDateFilter(getTodayString());
-        }
-    }, [selectedDetailCustomer]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, mainDateFilter]);
+    const [manualEntry, setManualEntry] = useState({ amount: '', category: 'Manual Entry', description: '' });
 
     // --- DATA PREPARATION ---
-    let visibleCustomers = MockService.getCustomers().filter(c => c.role !== UserRole.ADMIN);
-    if (!isAdmin) {
-        visibleCustomers = visibleCustomers.filter(c => c.id === user.id);
-    } else {
-        visibleCustomers = visibleCustomers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }
+    const allDebts = useMemo(() => MockService.getDebts(), [refresh]);
+    const allPayments = useMemo(() => MockService.getRepayments(), [refresh]);
+    const categorySuggestions = useMemo(() => Array.from(new Set(allDebts.map(d => d.category))).sort(), [allDebts]);
+    
+    // Dynamic Live Balance Calculation for Detail View
+    const liveCustomerBalance = useMemo(() => {
+        if (!selectedDetailCustomer) return 0;
+        const debts = allDebts.filter(d => d.customerId === selectedDetailCustomer.id);
+        const payments = allPayments.filter(p => p.customerId === selectedDetailCustomer.id);
+        const totalD = debts.reduce((s, d) => s + d.amount, 0);
+        const totalP = payments.reduce((s, p) => s + p.amount, 0);
+        return Math.max(0, totalD - totalP);
+    }, [selectedDetailCustomer, allDebts, allPayments, refresh]);
 
-    const calculateHistoricalTotal = (customerId: string, dateLimit: string) => {
-        const rawDebts = MockService.getDebts(customerId);
-        const rawPayments = MockService.getRepayments(customerId);
-        const debtsUntilDate = rawDebts.filter(d => getLocalDateFromISO(d.createdAt) <= dateLimit);
-        const paymentsUntilDate = rawPayments.filter(p => getLocalDateFromISO(p.timestamp) <= dateLimit);
-        const totalDebt = debtsUntilDate.reduce((sum, d) => sum + d.amount, 0);
-        const totalPaid = paymentsUntilDate.reduce((sum, p) => sum + p.amount, 0);
-        return totalDebt - totalPaid;
-    };
+    const availableRepayCategories = useMemo(() => {
+        if (!repayCustomer) return [];
+        return Array.from(new Set(allDebts.filter(d => d.customerId === repayCustomer && (d.amount - d.paidAmount) >= 0.01).map(d => d.category))).sort();
+    }, [repayCustomer, allDebts]);
 
-    const customerDebts = useMemo(() => {
-        return visibleCustomers.map(cust => {
-            const debts = MockService.getDebts(cust.id);
-            const categories: Record<string, DebtRecord[]> = {};
-            debts.forEach(d => {
-                if (!categories[d.category]) categories[d.category] = [];
-                categories[d.category].push(d);
-            });
-            let displayDebt = cust.totalDebt;
-            if (mainDateFilter) {
-                displayDebt = calculateHistoricalTotal(cust.id, mainDateFilter);
-            }
-            return { ...cust, debts, categories, displayDebt };
-        }).sort((a, b) => b.displayDebt - a.displayDebt);
-    }, [visibleCustomers, mainDateFilter, refresh]);
+    // Customer balances lookup for the main list
+    const customerBalances = useMemo(() => {
+        const balances: Record<string, number> = {};
+        MockService.getCustomers().forEach(c => {
+            const debts = allDebts.filter(d => d.customerId === c.id);
+            const payments = allPayments.filter(p => p.customerId === c.id);
+            const totalD = debts.reduce((s, d) => s + d.amount, 0);
+            const totalP = payments.reduce((s, p) => s + p.amount, 0);
+            balances[c.id] = Math.max(0, totalD - totalP);
+        });
+        return balances;
+    }, [allDebts, allPayments, refresh]);
 
-    const totalPages = Math.ceil(customerDebts.length / itemsPerPage);
-    const paginatedDebts = useMemo(() => {
+    const filteredCustomers = useMemo(() => {
+        let list = MockService.getCustomers().filter(c => c.role !== UserRole.ADMIN);
+        if (!isAdmin) list = list.filter(c => c.id === user.id);
+        else {
+            if (searchTerm) list = list.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm));
+        }
+        // Sort by the calculated live balance
+        return list.sort((a, b) => (customerBalances[b.id] || 0) - (customerBalances[a.id] || 0));
+    }, [searchTerm, isAdmin, user.id, customerBalances]);
+
+    const paginatedCustomers = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return customerDebts.slice(start, start + itemsPerPage);
-    }, [customerDebts, currentPage]);
+        return filteredCustomers.slice(start, start + itemsPerPage);
+    }, [filteredCustomers, currentPage]);
 
-    const categorySuggestions = useMemo(() => {
-        const cats = new Set<string>();
-        MockService.getDebts().forEach(d => cats.add(d.category));
-        MockService.getProducts().forEach(p => cats.add(p.category));
-        return Array.from(cats).sort();
-    }, [refresh]);
-
-    const filteredShopProducts = useMemo(() => {
+    const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+    const allProducts = useMemo(() => MockService.getProducts(), [refresh]);
+    const filteredProducts = useMemo(() => {
         return allProducts.filter(p => {
             const matchesSearch = p.name.toLowerCase().includes(shopSearch.toLowerCase());
             const matchesCategory = shopCategory === 'All' || p.category === shopCategory;
@@ -191,1079 +133,534 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         });
     }, [allProducts, shopSearch, shopCategory]);
 
-    const productCategories = useMemo(() => {
-        const cats = new Set(allProducts.map(p => p.category));
-        return ['All', ...Array.from(cats).sort()];
-    }, [allProducts]);
+    const productCategories = useMemo(() => ['All', ...Array.from(new Set(allProducts.map(p => p.category))).sort()], [allProducts]);
 
-    // --- DRAG AND DROP HANDLERS ---
-    const onDragStart = (e: React.DragEvent, id: string, type: 'DEBT' | 'PAYMENT') => {
-        setDraggedTxnId(id);
-        setDraggedTxnType(type);
-        e.dataTransfer.setData('id', id);
-        e.dataTransfer.setData('type', type);
-        e.dataTransfer.effectAllowed = 'move';
-        
-        // Custom drag ghost
-        const ghost = document.createElement('div');
-        ghost.textContent = `Moving ${type === 'DEBT' ? 'Debt' : 'Payment'}...`;
-        ghost.style.padding = '10px 16px';
-        ghost.style.background = type === 'DEBT' ? '#ef4444' : '#10b981';
-        ghost.style.color = 'white';
-        ghost.style.fontWeight = 'bold';
-        ghost.style.borderRadius = '24px';
-        ghost.style.position = 'absolute';
-        ghost.style.top = '-1000px';
-        ghost.style.zIndex = '9999';
-        document.body.appendChild(ghost);
-        e.dataTransfer.setDragImage(ghost, 0, 0);
-        setTimeout(() => document.body.removeChild(ghost), 0);
-    };
-
-    const onDragOver = (e: React.DragEvent, category: string) => {
-        e.preventDefault();
-        // Only debts can be moved between categories
-        if (draggedTxnType === 'DEBT' && dropOverCategory !== category) {
-            setDropOverCategory(category);
+    // --- EFFECTS ---
+    useEffect(() => {
+        if (showAddModal) {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            setDebtDate(now.toISOString().slice(0, 16));
+            setWorkspaceTab('CATALOG');
+            setModalCustPage(1);
+            setModalProdPage(1);
+            setModalQueuePage(1);
         }
+    }, [showAddModal]);
+
+    useEffect(() => { setLedgerPage(1); }, [detailFilterDate, detailSearch, selectedDetailCustomer]);
+
+    // --- DRAG HANDLERS ---
+    const handleDragStart = (e: React.DragEvent, txn: any) => {
+        e.dataTransfer.setData('text/plain', txn.id);
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedTxn({ id: txn.id, type: txn.type, category: txn.category });
+        setTimeout(() => { setIsDragging(true); }, 0);
     };
 
-    const onDrop = async (e: React.DragEvent, targetCategory: string) => {
+    const handleDragEnd = () => {
+        setIsDragging(false);
+        setDraggedTxn(null);
+        setActiveDropTarget(null);
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetCategory: string) => {
         e.preventDefault();
-        const id = e.dataTransfer.getData('id') || draggedTxnId;
-        const type = e.dataTransfer.getData('type') || draggedTxnType;
-        
-        // Only debts can be re-categorized
-        if (id && type === 'DEBT') {
+        if (!draggedTxn) return;
+        if (targetCategory === 'DELETE_ZONE') {
+            setDeleteTarget({ id: draggedTxn.id, type: draggedTxn.type });
+            setShowDeleteModal(true);
+        } else if (targetCategory !== draggedTxn.category) {
             try {
-                await MockService.updateDebtCategory(id, targetCategory);
+                if (draggedTxn.type === 'DEBT') {
+                    await MockService.updateDebtCategory(draggedTxn.id, targetCategory);
+                } else {
+                    await MockService.updateRepaymentCategory(draggedTxn.id, targetCategory);
+                }
                 showToast(`Moved to ${targetCategory}`, 'success');
                 setRefresh(prev => prev + 1);
-            } catch (error) {
-                showToast('Failed to move record', 'error');
+            } catch (err) {
+                showToast('Update failed', 'error');
             }
-        } else if (type === 'PAYMENT') {
-            showToast('Payments cannot be moved between categories manually', 'info');
         }
-        
-        setDraggedTxnId(null);
-        setDraggedTxnType(null);
-        setDropOverCategory(null);
-        setIsOverTrash(false);
+        handleDragEnd();
     };
 
-    const onDragOverTrash = (e: React.DragEvent) => {
+    const handleDragOver = (e: React.DragEvent, target: string) => {
         e.preventDefault();
-        if (!isOverTrash) setIsOverTrash(true);
-    };
-
-    const onDropTrash = async (e: React.DragEvent) => {
-        e.preventDefault();
-        const id = e.dataTransfer.getData('id') || draggedTxnId;
-        const type = e.dataTransfer.getData('type') as 'DEBT' | 'PAYMENT' || draggedTxnType;
-
-        if (id && type) {
-            setDeleteTarget({ id, type });
-            setShowDeleteModal(true);
-            setDeletePassInput('');
-            setShowDeletePass(false);
-        }
-        
-        setDraggedTxnId(null);
-        setDraggedTxnType(null);
-        setIsOverTrash(false);
-        setDropOverCategory(null);
-    };
-
-    const onDragEnd = () => {
-        setDraggedTxnId(null);
-        setDraggedTxnType(null);
-        setDropOverCategory(null);
-        setIsOverTrash(false);
-    };
-
-    const handleManualDelete = (tx: any, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setDeleteTarget({ id: tx.id, type: tx.type });
-        setShowDeleteModal(true);
-        setDeletePassInput('');
-        setShowDeletePass(false);
-    };
-
-    const confirmDelete = async () => {
-        if (!deleteTarget) return;
-        
-        // Trim input to prevent errors from trailing spaces
-        const trimmedInput = deletePassInput.trim();
-        
-        // Robust check: if user.password is missing, find it from the master customers list
-        let correctPassword = user.password;
-        if (!correctPassword) {
-            const masterUser = MockService.getCustomers().find(c => c.id === user.id);
-            correctPassword = masterUser?.password;
-        }
-
-        // Fallback for Supabase environments where password isn't in profile but used for Auth
-        if (!correctPassword) {
-            showToast('Session error: Deletion password not found. Please log out and log back in to refresh your credentials.', 'error');
-            return;
-        }
-
-        if (trimmedInput !== correctPassword) {
-            showToast('Incorrect deletion password', 'error');
-            return;
-        }
-
-        try {
-            if (deleteTarget.type === 'DEBT') {
-                await MockService.deleteDebt(deleteTarget.id);
-            } else {
-                await MockService.deleteRepayment(deleteTarget.id);
-            }
-            showToast('Record deleted successfully', 'success');
-            setRefresh(prev => prev + 1);
-            setShowDeleteModal(false);
-            setDeleteTarget(null);
-            setDeletePassInput('');
-        } catch (error) {
-            showToast('Failed to delete record', 'error');
-        }
-    };
-
-    // --- RENDER HELPERS ---
-    const handleCustomerClick = (wrapper: any) => {
-        setSelectedDetailCustomer(wrapper);
-    };
-
-    const renderLedgerList = (customerId: string) => {
-        const rawDebts = MockService.getDebts(customerId);
-        const rawPayments = MockService.getRepayments(customerId);
-        const categories = Array.from(new Set([...rawDebts.map(d => d.category), ...rawPayments.map(p => p.category)])).sort();
-
-        if (categories.length === 0) return <div className="text-center py-12 text-gray-400">No transaction history.</div>;
-
-        return (
-            <div className="space-y-6 pb-2">
-                {categories.map(cat => {
-                    const txns = [
-                        ...rawDebts.filter(d => d.category === cat).map(d => ({ 
-                            id: d.id, date: d.createdAt, type: 'DEBT' as const, items: d.items || [], 
-                            amount: d.amount, desc: d.items && d.items.length > 0 ? (d.items.length === 1 ? d.items[0].productName : `${d.items[0].productName} +${d.items.length-1}`) : (d.notes || d.category)
-                        })),
-                        ...rawPayments.filter(p => p.category === cat).map(p => ({ 
-                            id: p.id, date: p.timestamp, type: 'PAYMENT' as const, items: [],
-                            amount: p.amount, desc: 'Payment Received'
-                        }))
-                    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-                    let running = 0;
-                    const fullLedger = txns.map(t => { 
-                        if (t.type === 'DEBT') running += t.amount; else running -= t.amount;
-                        return { ...t, balance: running, debit: t.type === 'DEBT' ? t.amount : 0, credit: t.type === 'PAYMENT' ? t.amount : 0 }; 
-                    });
-
-                    let startBal = 0;
-                    let displayLedger = [...fullLedger]; 
-                    let categoryTotal = fullLedger.length > 0 ? fullLedger[fullLedger.length - 1].balance : 0;
-
-                    if (detailDateFilter) {
-                        const before = fullLedger.filter(t => getLocalDateFromISO(t.date) < detailDateFilter);
-                        startBal = before.length > 0 ? before[before.length - 1].balance : 0;
-                        const until = fullLedger.filter(t => getLocalDateFromISO(t.date) <= detailDateFilter);
-                        categoryTotal = until.length > 0 ? until[until.length - 1].balance : 0;
-                        displayLedger = fullLedger.filter(t => getLocalDateFromISO(t.date) === detailDateFilter);
-                    }
-
-                    if (displayLedger.length === 0 && startBal === 0) return null;
-
-                    const isDropTarget = dropOverCategory === cat;
-
-                    return (
-                        <div 
-                            key={cat} 
-                            onDragOver={(e) => isAdmin && onDragOver(e, cat)}
-                            onDrop={(e) => isAdmin && onDrop(e, cat)}
-                            className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border transition-all duration-200 overflow-hidden ${isDropTarget ? 'border-blue-500 ring-2 ring-blue-100 scale-[1.01] bg-blue-50/20' : 'border-gray-200 dark:border-gray-700'}`}
-                        >
-                            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <div className={`w-1.5 h-6 rounded-full transition-colors ${isDropTarget ? 'bg-blue-600 animate-pulse' : 'bg-blue-600'}`}></div>
-                                    <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wider">{cat}</h3>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-gray-500 uppercase font-bold">Outstanding</p>
-                                    <p className="text-lg font-bold text-red-600 font-mono">₱{categoryTotal.toLocaleString()}</p>
-                                </div>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-white dark:bg-gray-800 border-b text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                                        <tr><th className="px-4 py-2 w-36">Date & Time</th><th className="px-4 py-2">Particulars</th><th className="px-4 py-2 text-right w-24">Debit</th><th className="px-4 py-2 text-right w-24">Credit</th><th className="px-4 py-2 text-right w-28">Balance</th><th className="px-2 w-10"></th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                                        {detailDateFilter && (
-                                            <tr className="bg-amber-50/30 dark:bg-amber-900/10">
-                                                <td className="px-4 py-2 text-xs font-mono text-gray-400">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-4 h-4"></span>
-                                                        {new Date(detailDateFilter).toLocaleDateString()}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-2 italic text-gray-600 dark:text-gray-400 font-medium">Balance Forward</td>
-                                                <td colSpan={2}></td>
-                                                <td className="px-4 py-2 text-right font-bold font-mono">₱{startBal.toLocaleString()}</td>
-                                                <td></td>
-                                            </tr>
-                                        )}
-                                        {displayLedger.map(tx => {
-                                            const isDraggable = isAdmin; // Both types draggable for deletion
-                                            const isBeingDragged = draggedTxnId === tx.id;
-                                            
-                                            return (
-                                                <tr 
-                                                    key={tx.id} 
-                                                    draggable={isDraggable}
-                                                    onDragStart={(e) => isDraggable && onDragStart(e, tx.id, tx.type)}
-                                                    onDragEnd={onDragEnd}
-                                                    className={`transition-colors group ${isBeingDragged ? 'opacity-40 grayscale' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'} ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                                                >
-                                                    <td className="px-4 py-2 text-[10px] text-gray-500 font-mono">
-                                                        <div className="flex items-center gap-2">
-                                                            {isDraggable ? (
-                                                                <GripVertical size={14} className="text-gray-300" />
-                                                            ) : (
-                                                                <span className="w-[14px]"></span>
-                                                            )}
-                                                            <div>
-                                                                <div>{new Date(tx.date).toLocaleDateString()}</div>
-                                                                <div className="text-gray-400">{new Date(tx.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-200">
-                                                        {tx.items && tx.items.length > 0 ? (
-                                                            <button 
-                                                                onClick={() => setViewingTxnItems(tx)}
-                                                                className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-left group/btn"
-                                                            >
-                                                                <List size={14} className="opacity-50 group-hover/btn:opacity-100" />
-                                                                {tx.desc}
-                                                            </button>
-                                                        ) : (
-                                                            tx.desc
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2 text-right text-red-600 font-mono">{tx.debit > 0 ? `₱${tx.debit.toLocaleString()}` : ''}</td>
-                                                    <td className="px-4 py-2 text-right text-green-600 font-mono">{tx.credit > 0 ? `₱${tx.credit.toLocaleString()}` : ''}</td>
-                                                    <td className="px-4 py-2 text-right font-bold font-mono">₱{tx.balance.toLocaleString()}</td>
-                                                    <td className="px-2">
-                                                        {isAdmin && (
-                                                            <button 
-                                                                onClick={(e) => handleManualDelete(tx, e)}
-                                                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                                                title="Delete Record"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        );
+        e.dataTransfer.dropEffect = 'move';
+        setActiveDropTarget(target);
     };
 
     // --- ACTIONS ---
-    const generateReport = (customerId: string) => {
-        const cust = MockService.getCustomers().find(c => c.id === customerId);
-        if (!cust) return;
-        const targetDate = detailDateFilter || getTodayString();
-        
-        const rawDebts = MockService.getDebts(customerId);
-        const rawPayments = MockService.getRepayments(customerId);
-        const categories = Array.from(new Set([...rawDebts.map(d => d.category), ...rawPayments.map(p => p.category)])).sort();
-
-        const reportCategories = categories.map(cat => {
-            const prevDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) < targetDate);
-            const prevPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) < targetDate);
-            const opening = prevDebts.reduce((s, d) => s + d.amount, 0) - prevPayments.reduce((s, p) => s + p.amount, 0);
-
-            const currDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) === targetDate);
-            const currPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) === targetDate);
-            
-            const added = currDebts.reduce((s, d) => s + d.amount, 0);
-            const paid = currPayments.reduce((s, p) => s + p.amount, 0);
-            const closing = opening + added - paid;
-
-            return { name: cat, opening, added, paid, closing, debts: currDebts, payments: currPayments };
-        }).filter(c => c.opening !== 0 || c.added !== 0 || c.paid !== 0);
-
-        const grandTotal = reportCategories.reduce((s, c) => s + c.closing, 0);
-
-        setReportData({ customer: cust, categories: reportCategories, grandTotal, date: targetDate });
-        setShowReportModal(true);
-    };
-
-    const handleSendSMS = (customer: Customer) => {
-        if (!customer.phone) {
-            showToast(`No phone number for ${customer.name}`, 'error');
-            return;
-        }
-
-        const targetDate = detailDateFilter || getTodayString();
-        const dateObj = new Date(targetDate);
-        const dateDisplay = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-        const rawDebts = MockService.getDebts(customer.id);
-        const rawPayments = MockService.getRepayments(customer.id);
-
-        const categories = Array.from(new Set([
-            ...rawDebts.map(d => d.category),
-            ...rawPayments.map(p => p.category)
-        ])).sort();
-
-        let grandTotal = 0;
-        const breakdownLines: string[] = [];
-
-        categories.forEach(cat => {
-            const prevDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) < targetDate);
-            const prevPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) < targetDate);
-            
-            const prevBal = prevDebts.reduce((sum, d) => sum + d.amount, 0) - prevPayments.reduce((sum, p) => sum + p.amount, 0);
-
-            const currDebts = rawDebts.filter(d => d.category === cat && getLocalDateFromISO(d.createdAt) === targetDate);
-            const currPayments = rawPayments.filter(p => p.category === cat && getLocalDateFromISO(p.timestamp) === targetDate);
-
-            const totalNewCharges = currDebts.reduce((sum, d) => sum + d.amount, 0);
-            const totalNewPayments = currPayments.reduce((sum, p) => sum + p.amount, 0);
-            
-            const endBal = prevBal + totalNewCharges - totalNewPayments;
-
-            if (Math.abs(endBal) > 0.01 || totalNewCharges > 0 || totalNewPayments > 0) {
-                breakdownLines.push(`[${cat}]`);
-                if (Math.abs(prevBal) > 0.01) {
-                    breakdownLines.push(`  Beg: P${prevBal.toLocaleString()}`);
-                }
-
-                const timeline: {ts: number, text: string}[] = [];
-
-                currDebts.forEach(d => { 
-                    const timeStr = new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    if (d.items && d.items.length > 0) {
-                        d.items.forEach(i => { 
-                            const itemTotal = i.price * i.quantity; 
-                            timeline.push({
-                                ts: new Date(d.createdAt).getTime(),
-                                text: `  ${timeStr} - ${i.productName} (x${i.quantity}): P${itemTotal.toLocaleString()}`
-                            });
-                        });
-                    } else {
-                        // Manual Entry -> Use notes if available
-                        const desc = d.notes ? d.notes : 'Manual Entry';
-                        timeline.push({
-                            ts: new Date(d.createdAt).getTime(),
-                            text: `  ${timeStr} - ${desc}: P${d.amount.toLocaleString()}`
-                        });
-                    }
-                });
-
-                currPayments.forEach(p => {
-                    const timeStr = new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    timeline.push({
-                        ts: new Date(p.timestamp).getTime(),
-                        text: `  ${timeStr} - Paid: P${p.amount.toLocaleString()}`
-                    });
-                });
-
-                timeline.sort((a, b) => a.ts - b.ts).forEach(t => breakdownLines.push(t.text));
-
-                breakdownLines.push(`  = End: P${endBal.toLocaleString()}`);
-                grandTotal += endBal;
-            }
-        });
-
-        const breakdown = breakdownLines.join('\n');
-        let message = `SOA\n${dateDisplay}\n\nTo: ${customer.name}\n\nTOTAL DUE: P${grandTotal.toLocaleString()}`;
-
-        if (breakdown) {
-            message += `\n\nDETAILS:\n${breakdown}`;
-        }
-        
-        message += `\n\n- Ledger Connect`;
-        
-        const ua = navigator.userAgent.toLowerCase();
-        const isiOS = /iphone|ipad|ipod/.test(ua);
-        const separator = isiOS ? '&' : '?';
-        const cleanPhone = customer.phone.replace(/[^0-9+]/g, '');
-
-        window.location.href = `sms:${cleanPhone}${separator}body=${encodeURIComponent(message)}`;
+    const handleOpenAdd = (cust?: Customer) => {
+        if (cust) { setSelectedCustomer(cust); setModalStep('WORKSPACE'); } 
+        else { setSelectedCustomer(null); setModalStep('SELECT_CUSTOMER'); }
+        setShowAddModal(true);
     };
 
     const handleAddProduct = (pid: string) => {
         const p = allProducts.find(x => x.id === pid);
-        if (!p) return;
-        const ex = selectedProducts.find(x => x.product.id === pid);
-        if (ex) setSelectedProducts(selectedProducts.map(x => x.product.id === pid ? { ...x, qty: x.qty + 1 } : x));
-        else setSelectedProducts([...selectedProducts, { product: p, qty: 1 }]);
-        showToast('Added to queue', 'info');
-    };
-
-    const handleRemoveProduct = (pid: string) => {
-        setSelectedProducts(selectedProducts.filter(p => p.product.id !== pid));
+        if (!p || !selectedCustomer) return;
+        const existing = selectedProducts.find(x => x.product.id === pid);
+        if (existing) setSelectedProducts(selectedProducts.map(x => x.product.id === pid ? { ...x, qty: x.qty + 1 } : x));
+        else {
+            const lastCat = MockService.getLastUsedCategory(selectedCustomer.id, pid);
+            setSelectedProducts([...selectedProducts, { product: p, qty: 1 }]);
+            setDebtAssignments(prev => ({ ...prev, [pid]: lastCat || p.category }));
+        }
+        showToast(`Added ${p.name}`, 'info');
     };
 
     const handleUpdateQty = (pid: string, delta: number) => {
-        setSelectedProducts(selectedProducts.map(i => i.product.id === pid ? { ...i, qty: Math.max(1, i.qty + delta) } : i));
+        setSelectedProducts(prev => prev.map(item => item.product.id === pid ? { ...item, qty: Math.max(1, item.qty + delta) } : item));
     };
 
-    const openNumpad = (pid: string, currentQty: number) => {
-        setNumpadTargetId(pid);
-        setNumpadInitialValue(currentQty);
-        setShowNumpad(true);
-    };
-
-    const handleProceedToAssign = () => {
-        if (!selectedCustomer) { showToast('Please select a customer', 'error'); return; }
-        if (selectedProducts.length === 0) { showToast('Please select products', 'error'); return; }
-        
-        const initial: Record<string, string> = {};
-        selectedProducts.forEach(item => {
-            const last = MockService.getLastUsedCategory(selectedCustomer, item.product.id);
-            initial[item.product.id] = last || item.product.category;
-        });
-        setDebtAssignments(initial);
-        setAddDebtStep('assign');
-    };
-
-    const submitDebt = () => {
-        if (!selectedCustomer) return showToast('Select Customer', 'error');
+    const submitDebt = async () => {
+        if (!selectedCustomer) return;
         const createdAt = debtDate ? new Date(debtDate).toISOString() : new Date().toISOString();
-        
-        if (addDebtMode === 'manual') {
-            if (!manualForm.amount) return;
-            MockService.createDebt({ 
-                id: `d-${Date.now()}`, 
-                customerId: selectedCustomer, 
-                amount: parseFloat(manualForm.amount), 
-                paidAmount: 0, 
-                items: [], 
-                category: manualForm.category || 'General', 
-                createdAt, 
-                status: DebtStatus.UNPAID,
-                notes: manualForm.description
-            });
-        } else {
-            const itemsByCategory: Record<string, any[]> = {};
-            selectedProducts.forEach(item => {
-                const cat = debtAssignments[item.product.id] || item.product.category;
-                if (!itemsByCategory[cat]) itemsByCategory[cat] = [];
-                itemsByCategory[cat].push({
-                    productId: item.product.id,
-                    productName: item.product.name,
-                    quantity: item.qty,
-                    price: item.product.price,
-                    category: cat
-                });
-            });
-
-            Object.entries(itemsByCategory).forEach(([cat, items]) => {
-                const total = items.reduce((s, i) => s + (i.price * i.quantity), 0);
-                MockService.createDebt({ 
-                    id: `d-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, 
-                    customerId: selectedCustomer, 
-                    amount: total, 
-                    paidAmount: 0, 
-                    items: items, 
-                    category: cat, 
-                    createdAt, 
-                    status: DebtStatus.UNPAID 
-                });
-            });
+        const itemsByCat: Record<string, any[]> = {};
+        selectedProducts.forEach(item => {
+            const cat = debtAssignments[item.product.id] || item.product.category;
+            if (!itemsByCat[cat]) itemsByCat[cat] = [];
+            itemsByCat[cat].push({ productId: item.product.id, productName: item.product.name, quantity: item.qty, price: item.product.price, category: cat });
+        });
+        for (const [cat, items] of Object.entries(itemsByCat)) {
+            const total = items.reduce((s, i) => s + (i.price * i.quantity), 0);
+            await MockService.createDebt({ id: `d-p-${Date.now()}-${Math.random().toString(36).substr(2,5)}`, customerId: selectedCustomer.id, amount: total, paidAmount: 0, items, category: cat, createdAt, status: DebtStatus.UNPAID });
         }
-        
-        setShowAddModal(false); 
-        setSelectedProducts([]); 
-        setRefresh(r => r + 1); 
-        showToast('Debt Recorded', 'success');
+        if (manualEntry.amount) {
+            await MockService.createDebt({ id: `d-m-${Date.now()}`, customerId: selectedCustomer.id, amount: parseFloat(manualEntry.amount), paidAmount: 0, items: [], category: manualEntry.category || 'Manual Entry', createdAt, status: DebtStatus.UNPAID, notes: manualEntry.description });
+        }
+        setShowAddModal(false); setSelectedProducts([]); setManualEntry({ amount: '', category: 'Manual Entry', description: '' }); 
+        setRefresh(prev => prev + 1);
+        showToast('Success', 'success');
     };
 
-    const submitRepayment = () => {
-        if (!repayCustomer || !repayAmount || !repayCategory) return;
-        MockService.repayDebtByCategory(repayCustomer, repayCategory, parseFloat(repayAmount));
-        setShowRepayModal(false); setRefresh(r => r + 1); showToast('Payment Recorded', 'success');
+    const handleRepaySubmit = async () => {
+        if (!repayCustomer || !repayAmount || !repayCategory) return showToast('Fill all fields', 'error');
+        await MockService.repayDebtByCategory(repayCustomer, repayCategory, parseFloat(repayAmount));
+        setShowRepayModal(false); setRepayAmount(''); setRefresh(prev => prev + 1);
+        showToast('Payment Recorded', 'success');
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        const correctPassword = user.password || MockService.getCustomers().find(c => c.id === user.id)?.password;
+        if (deletePassInput.trim() !== correctPassword) return showToast('Incorrect password', 'error');
+        if (deleteTarget.type === 'DEBT') await MockService.deleteDebt(deleteTarget.id);
+        else await MockService.deleteRepayment(deleteTarget.id);
+        showToast('Deleted', 'success'); setRefresh(prev => prev + 1);
+        setShowDeleteModal(false);
+        setDeletePassInput('');
+    };
+
+    const handleSendSMS = () => {
+        if (!selectedDetailCustomer) return;
+        const debts = MockService.getDebts(selectedDetailCustomer.id);
+        const payments = MockService.getRepayments(selectedDetailCustomer.id);
+        const allTxns = [
+            ...debts.map(d => ({ ...d, type: 'DEBT', date: d.createdAt, description: d.items.length > 0 ? (d.items.length === 1 ? d.items[0].productName : `${d.items[0].productName} +${d.items.length-1}`) : (d.notes || 'Manual Entry') })),
+            ...payments.map(p => ({ ...p, type: 'PAYMENT', date: p.timestamp, description: `Repayment` }))
+        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const categorized: Record<string, any[]> = {};
+        allTxns.forEach(txn => {
+            if (!categorized[txn.category]) categorized[txn.category] = [];
+            categorized[txn.category].push(txn);
+        });
+        let smsBody = `SOA: ${selectedDetailCustomer.name.toUpperCase()}\nDATE: ${new Date(detailFilterDate).toLocaleDateString()}\n`;
+        let totalDue = 0;
+        Object.keys(categorized).sort().forEach(cat => {
+            const txns = categorized[cat];
+            let catBalance = 0;
+            const periodTxns = [];
+            txns.forEach(t => {
+                const dt = getLocalDateFromISO(t.date);
+                if (dt < detailFilterDate) {
+                    catBalance += (t.type === 'DEBT' ? t.amount : -t.amount);
+                } else if (dt === detailFilterDate) {
+                    periodTxns.push(t);
+                }
+            });
+            if (periodTxns.length === 0 && catBalance === 0) return;
+            smsBody += `\n[[${cat.toUpperCase()}]]\n`;
+            smsBody += `PREV BAL: P${catBalance.toLocaleString()}\n`;
+            periodTxns.forEach(txn => {
+                const timeStr = new Date(txn.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const sign = txn.type === 'DEBT' ? '+' : '-';
+                smsBody += `${timeStr} ${sign}P${txn.amount.toLocaleString()} (${txn.description})\n`;
+                if (txn.type === 'DEBT' && txn.items && txn.items.length > 0) {
+                    txn.items.forEach((item: OrderItem) => { smsBody += `  - ${item.productName} x${item.quantity} (P${item.price.toLocaleString()})\n`; });
+                }
+                catBalance += (txn.type === 'DEBT' ? txn.amount : -txn.amount);
+            });
+            smsBody += `CLOSING: P${catBalance.toLocaleString()}\n`;
+            totalDue += catBalance;
+        });
+        smsBody += `\nTOTAL DUE: P${totalDue.toLocaleString()}`;
+        window.location.href = `sms:${selectedDetailCustomer.phone}?body=${encodeURIComponent(smsBody)}`;
+    };
+
+    // --- LEDGER RENDERERS ---
+    const renderLedger = (customerId: string) => {
+        const debts = MockService.getDebts(customerId);
+        const payments = MockService.getRepayments(customerId);
+        const allTxns = [
+            ...debts.map(d => ({ ...d, type: 'DEBT', id: d.id, category: d.category, createdAt: d.createdAt, amount: d.amount, items: d.items, notes: d.notes })),
+            ...payments.map(p => ({ ...p, type: 'PAYMENT', id: p.id, category: p.category, createdAt: p.timestamp, amount: p.amount }))
+        ].map(txn => ({
+            ...txn,
+            date: txn.createdAt,
+            description: (txn as any).type === 'DEBT' ? 
+                ((txn as any).items?.length > 0 ? 
+                    ((txn as any).items.length === 1 ? (txn as any).items[0].productName : `${(txn as any).items[0].productName} +${(txn as any).items.length-1}`) : 
+                    ((txn as any).notes || 'Manual Entry')) : 
+                'Repayment'
+        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        const categorized: Record<string, any[]> = {};
+        allTxns.forEach(txn => {
+            if (!categorized[txn.category]) categorized[txn.category] = [];
+            categorized[txn.category].push(txn);
+        });
+
+        const categories = Object.keys(categorized).sort();
+        if (categories.length === 0) {
+            return (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-slate-600">
+                    <PackageSearch size={48} className="opacity-10 mb-4" />
+                    <p className="font-black uppercase tracking-widest text-sm text-center">No Data</p>
+                </div>
+            );
+        }
+
+        return categories.map(cat => {
+            const txns = categorized[cat];
+            let balance = 0;
+            const periodTxns: any[] = [];
+            txns.forEach(t => {
+                const dt = getLocalDateFromISO(t.date);
+                if (dt < detailFilterDate) {
+                    balance += (t.type === 'DEBT' ? t.amount : -t.amount);
+                } else if (dt === detailFilterDate) {
+                    const matchesSearch = !detailSearch || t.description.toLowerCase().includes(detailSearch.toLowerCase());
+                    if (matchesSearch) periodTxns.push(t);
+                }
+            });
+            const openingBalance = balance;
+            if (periodTxns.length === 0 && !detailSearch && openingBalance === 0) return null;
+            
+            const paginatedLedger = periodTxns.slice((ledgerPage - 1) * ledgerItemsPerPage, ledgerPage * ledgerItemsPerPage);
+            const totalLedgerPages = Math.ceil(periodTxns.length / ledgerItemsPerPage);
+
+            return (
+                <div key={cat} className="mb-10 bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-xl dark:shadow-premium-dark overflow-hidden transition-all duration-300">
+                    <div className="bg-blue-600 dark:bg-slate-800 px-6 py-4 flex justify-between items-center border-b dark:border-slate-700">
+                        <div className="flex items-center gap-3">
+                            <Layers className="text-blue-100 dark:text-blue-400" size={20} />
+                            <h3 className="font-black text-white dark:text-slate-100 uppercase tracking-widest text-sm">{cat}</h3>
+                        </div>
+                        <span className="text-[10px] font-black text-blue-100 dark:text-slate-400 uppercase tracking-widest">Ledger</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50 dark:bg-slate-950 border-b dark:border-slate-800 text-[10px] font-black uppercase text-gray-400 dark:text-slate-500 tracking-widest">
+                                    <th className="p-4 w-32">Time</th>
+                                    <th className="p-4">Particulars</th>
+                                    <th className="p-4 text-right">Debit (+)</th>
+                                    <th className="p-4 text-right">Credit (-)</th>
+                                    <th className="p-4 text-right">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                <tr className="bg-blue-50/30 dark:bg-slate-800/20 italic text-gray-500 dark:text-slate-400">
+                                    <td className="p-4 text-[10px]" colSpan={2}>Balance Forward</td>
+                                    <td colSpan={2}></td>
+                                    <td className="p-4 text-right font-bold font-mono">₱{openingBalance.toLocaleString()}</td>
+                                </tr>
+                                {paginatedLedger.length === 0 ? (
+                                    <tr><td colSpan={5} className="p-8 text-center text-xs text-gray-400 dark:text-slate-600 font-bold uppercase tracking-widest">No activity</td></tr>
+                                ) : (
+                                    paginatedLedger.map((txn, idx) => {
+                                        const fullIndex = (ledgerPage - 1) * ledgerItemsPerPage + idx;
+                                        let currentRunningBal = openingBalance;
+                                        for(let i=0; i<=fullIndex; i++) {
+                                            currentRunningBal += (periodTxns[i].type === 'DEBT' ? periodTxns[i].amount : -periodTxns[i].amount);
+                                        }
+                                        return (
+                                            <tr 
+                                                key={idx} 
+                                                draggable={isAdmin}
+                                                onDragStart={(e) => handleDragStart(e, txn)}
+                                                onDragEnd={handleDragEnd}
+                                                className={`relative group transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-800/50 ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedTxn?.id === txn.id ? 'opacity-20 scale-95' : 'opacity-100'}`}
+                                            >
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {isAdmin && <Grab size={14} className="text-gray-300 dark:text-slate-600 group-hover:text-blue-400 transition-colors" />}
+                                                        <div className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">{new Date(txn.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-gray-900 dark:text-slate-200 truncate max-w-[150px]">{txn.description}</span>
+                                                        {txn.type === 'DEBT' && (txn as any).items?.length > 0 && (
+                                                            <button onClick={() => setViewingTxnItems(txn)} className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors shrink-0"><List size={14}/></button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-right font-mono font-bold text-red-600 dark:text-rose-400 w-32">{txn.type === 'DEBT' ? `₱${txn.amount.toLocaleString()}` : '—'}</td>
+                                                <td className="p-4 text-right font-mono font-bold text-green-600 dark:text-emerald-400 w-32">{txn.type === 'PAYMENT' ? `₱${txn.amount.toLocaleString()}` : '—'}</td>
+                                                <td className="p-4 text-right font-mono font-black text-gray-900 dark:text-white w-32">₱{currentRunningBal.toLocaleString()}</td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                            <tfoot className="bg-gray-50 dark:bg-slate-950 border-t dark:border-slate-800 font-black">
+                                <tr>
+                                    <td colSpan={4} className="p-4 text-right text-[10px] text-gray-400 dark:text-slate-500 uppercase tracking-widest">Closing for Date</td>
+                                    <td className="p-4 text-right text-blue-600 dark:text-blue-400 text-lg">₱{(openingBalance + periodTxns.reduce((s,t) => s + (t.type === 'DEBT' ? t.amount : -t.amount), 0)).toLocaleString()}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {totalLedgerPages > 1 && (
+                        <div className="px-6 py-4 bg-white dark:bg-slate-900 border-t dark:border-slate-800 flex justify-between items-center no-print">
+                            <p className="text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">Page {ledgerPage}/{totalLedgerPages}</p>
+                            <div className="flex gap-2">
+                                <button disabled={ledgerPage === 1} onClick={() => setLedgerPage(p => p - 1)} className="p-2 border dark:border-slate-800 rounded-xl disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"><ChevronLeft size={16}/></button>
+                                <button disabled={ledgerPage >= totalLedgerPages} onClick={() => setLedgerPage(p => p + 1)} className="p-2 border dark:border-slate-800 rounded-xl disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"><ChevronRight size={16}/></button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        });
     };
 
     return (
-        <div className="space-y-4 relative min-h-full">
-            {/* Header */}
-            <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md -mx-4 px-4 pt-1 pb-2 shadow-sm">
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <div className="flex flex-col gap-1">
-                        <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">{t.debts}<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">{customerDebts.length}</span></h2>
-                    </div>
-                    <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
-                        <div className="relative flex-1 xl:w-64">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                            <input 
-                                type="text" 
-                                placeholder="Search..." 
-                                className="w-full pl-9 pr-10 py-2 text-sm rounded-full bg-gray-100 dark:bg-gray-700 border-none outline-none font-medium" 
-                                value={searchTerm} 
-                                onChange={(e) => setSearchTerm(e.target.value)} 
-                            />
-                            {searchTerm && (
-                                <button 
-                                    onClick={() => setSearchTerm('')}
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        <div className="space-y-6 relative min-h-full">
+            {/* DRAG OVERLAY */}
+            {isDragging && (
+                <div className="fixed inset-0 z-[100] bg-blue-900/40 dark:bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-start pt-20 animate-in fade-in duration-300">
+                    <div className="max-w-4xl w-full px-6 space-y-8 text-center">
+                        <div className="space-y-2">
+                            <h4 className="text-3xl font-black text-white uppercase tracking-tighter drop-shadow-xl">Drop to Reassign</h4>
+                            <p className="text-sm font-bold text-blue-200 dark:text-slate-400 uppercase tracking-widest">Organize entries instantly</p>
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-8">
+                            {categorySuggestions.map(cat => (
+                                <div 
+                                    key={cat}
+                                    onDragOver={(e) => handleDragOver(e, cat)}
+                                    onDragLeave={() => setActiveDropTarget(null)}
+                                    onDrop={(e) => handleDrop(e, cat)}
+                                    className={`relative px-10 py-12 rounded-full border-4 transition-all duration-300 flex flex-col items-center justify-center gap-3 ${activeDropTarget === cat ? 'bg-blue-600 border-white text-white scale-125 shadow-[0_0_60px_rgba(37,99,235,0.6)]' : 'bg-white/10 dark:bg-slate-800/50 border-white/20 dark:border-slate-700 text-white shadow-2xl backdrop-blur-lg hover:bg-white/20'}`}
                                 >
-                                    <X size={16} />
-                                </button>
-                            )}
+                                    <Layers size={activeDropTarget === cat ? 40 : 32} />
+                                    <span className="text-xs font-black uppercase tracking-widest">{cat}</span>
+                                    {activeDropTarget === cat && <div className="absolute inset-0 rounded-full animate-ping bg-blue-400/30" />}
+                                </div>
+                            ))}
+                            <div 
+                                onDragOver={(e) => handleDragOver(e, 'DELETE_ZONE')}
+                                onDragLeave={() => setActiveDropTarget(null)}
+                                onDrop={(e) => handleDrop(e, 'DELETE_ZONE')}
+                                className={`relative px-10 py-12 rounded-full border-4 transition-all duration-300 flex flex-col items-center justify-center gap-3 ${activeDropTarget === 'DELETE_ZONE' ? 'bg-red-600 border-white text-white scale-125 shadow-[0_0_60px_rgba(220,38,38,0.6)]' : 'bg-red-500/20 dark:bg-rose-500/20 border-red-500/30 dark:border-rose-500/30 text-red-100 dark:text-rose-100 shadow-2xl backdrop-blur-lg'}`}
+                            >
+                                <Trash2 size={activeDropTarget === 'DELETE_ZONE' ? 40 : 32} />
+                                <span className="text-xs font-black uppercase tracking-widest">Delete</span>
+                                {activeDropTarget === 'DELETE_ZONE' && <div className="absolute inset-0 rounded-full animate-ping bg-red-400/30" />}
+                            </div>
                         </div>
-                        <div className="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-full px-2">
-                            <Calendar size={16} className="text-gray-400 ml-1" />
-                            <input type="date" className="bg-transparent border-none text-sm py-2 w-32 focus:ring-0" value={mainDateFilter} onChange={e => setMainDateFilter(e.target.value)} />
-                            {mainDateFilter && <button onClick={() => setMainDateFilter('')}><X size={14} className="text-gray-500" /></button>}
-                        </div>
-                        <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                            <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}><LayoutList size={18} /></button>
-                            <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}><LayoutGrid size={18} /></button>
+                        <div className="pt-10"><button onClick={handleDragEnd} className="px-8 py-3 bg-white/10 dark:bg-slate-800 text-white rounded-full font-black text-xs uppercase tracking-widest transition-all">Cancel</button></div>
+                    </div>
+                </div>
+            )}
+
+            {/* Main Header */}
+            <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-md -mx-4 px-4 pt-1 pb-4 border-b dark:border-slate-900 transition-colors duration-300">
+                <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-center gap-3">
+                        <h2 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight flex items-center gap-3 flex-wrap">
+                            Ledger
+                            <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 px-3 py-1 rounded-full font-black tracking-widest shrink-0">{filteredCustomers.length} ACCOUNTS</span>
+                        </h2>
+                        <div className="flex items-center gap-2 shrink-0">
+                             <div className="flex bg-white dark:bg-slate-900 p-1 rounded-xl shadow-sm border dark:border-slate-800 transition-all">
+                                <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 dark:text-slate-600'}`}><LayoutGrid size={18} /></button>
+                                <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 dark:text-slate-600'}`}><LayoutList size={18} /></button>
+                            </div>
                         </div>
                     </div>
+                    {isAdmin && (
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
+                            <input type="text" placeholder="Search..." className="w-full pl-10 pr-4 py-3 text-sm rounded-xl bg-white dark:bg-slate-900 border dark:border-slate-800 outline-none shadow-sm dark:shadow-premium-dark font-bold focus:ring-2 focus:ring-blue-500 transition-all dark:text-slate-200" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Content Area */}
+            {/* List/Grid Displays */}
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {paginatedDebts.map((c, idx) => {
-                        const hasDebt = c.displayDebt > 0;
-                        const style = hasDebt ? getCardStyle(idx) : 'bg-gradient-to-br from-green-500 to-green-700';
+                    {paginatedCustomers.map((c, idx) => {
+                        const colors = ['from-pink-500 to-rose-600', 'from-blue-500 to-indigo-600', 'from-orange-400 to-orange-600', 'from-emerald-500 to-teal-600', 'from-purple-500 to-purple-700'];
+                        const bal = customerBalances[c.id] || 0;
+                        const colorClass = bal > 0 ? colors[idx % colors.length] : 'from-slate-400 to-slate-500';
                         return (
-                            <div key={c.id} onClick={() => handleCustomerClick(c)} className={`relative aspect-[4/5] rounded-3xl p-5 shadow-lg flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform ${style}`}>
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-[8rem] font-bold text-white opacity-10 select-none transform -rotate-12 scale-150">{getInitials(c.name)}</span></div>
-                                <div className="relative z-10 flex justify-between items-start">
-                                    <div className={`px-3 py-1.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md ${hasDebt ? 'bg-red-600/90 text-white' : 'bg-green-800/80 text-white'}`}>
-                                        {hasDebt ? `DUE: ₱${c.displayDebt.toLocaleString()}` : 'CLEAN'}
-                                    </div>
-                                </div>
-                                <div className="relative z-10 flex items-end justify-between mt-auto">
-                                    <div className="flex-1 min-w-0 mr-2">
-                                        <h3 className="text-xl font-bold text-white truncate drop-shadow-md">{c.name}</h3>
-                                        <div className="flex items-center gap-1 text-white/90 mt-1"><Phone size={12} fill="currentColor" /><span className="text-xs font-medium truncate">{c.phone}</span></div>
-                                    </div>
-                                    <button onClick={(e) => { e.stopPropagation(); setRepayCustomer(c.id); setShowRepayModal(true); }} className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white hover:text-blue-600 transition-colors shadow-inner border border-white/30 shrink-0"><Wallet size={18} /></button>
-                                </div>
+                            <div key={c.id} onClick={() => setSelectedDetailCustomer(c)} className={`relative aspect-[4/5] rounded-[2rem] p-6 shadow-xl dark:shadow-premium-dark flex flex-col justify-between overflow-hidden cursor-pointer hover:scale-[1.03] transition-all bg-gradient-to-br ${colorClass}`}>
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 select-none"><span className="text-[10rem] font-black text-white">{getInitials(c.name)}</span></div>
+                                <div className="relative z-10"><div className="bg-white/20 dark:bg-slate-900/40 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black text-white uppercase tracking-widest border border-white/30 inline-block">₱{bal.toLocaleString()}</div></div>
+                                <div className="relative z-10"><h3 className="text-xl font-black text-white truncate leading-tight">{c.name}</h3><p className="text-[10px] text-white/70 font-bold uppercase mt-1 flex items-center gap-1"><Phone size={10} /> {c.phone}</p></div>
                             </div>
                         );
                     })}
                 </div>
             ) : (
-                <div className="space-y-2">
-                    {paginatedDebts.map(c => (
-                        <div key={c.id} onClick={() => handleCustomerClick(c)} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">{getInitials(c.name)}</div>
-                                <div><h4 className="font-bold text-gray-800 dark:text-white">{c.name}</h4><p className="text-xs text-gray-500">{c.phone}</p></div>
+                <div className="space-y-3">
+                    {paginatedCustomers.map(c => {
+                        const bal = customerBalances[c.id] || 0;
+                        return (
+                            <div key={c.id} onClick={() => setSelectedDetailCustomer(c)} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border dark:border-slate-800 flex justify-between items-center cursor-pointer hover:border-blue-500 group transition-all duration-300">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-lg">{getInitials(c.name)}</div>
+                                    <div><h4 className="font-black text-gray-800 dark:text-slate-100 uppercase leading-none">{c.name}</h4><p className="text-[10px] text-gray-500 dark:text-slate-500 font-bold tracking-widest mt-1">{c.phone}</p></div>
+                                </div>
+                                <div className="text-right"><p className={`text-xl font-black font-mono ${bal > 0 ? 'text-red-600 dark:text-rose-400' : 'text-green-600 dark:text-emerald-400'}`}>₱{bal.toLocaleString()}</p></div>
                             </div>
-                            <div className="text-right">
-                                <p className={`font-bold ${c.displayDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>₱{c.displayDebt.toLocaleString()}</p>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-                <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mt-4">
-                    <p className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</p>
+                <div className="flex items-center justify-between mt-6 bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800 shadow-sm transition-colors duration-300">
+                    <p className="text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">Page {currentPage} of {totalPages}</p>
                     <div className="flex gap-2">
-                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"><ChevronLeft size={16} /></button>
-                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"><ChevronRight size={16} /></button>
+                        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-2 border dark:border-slate-800 rounded-xl disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"><ChevronLeft size={18} /></button>
+                        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-2 border dark:border-slate-800 rounded-xl disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"><ChevronRight size={18} /></button>
                     </div>
                 </div>
             )}
 
-            {/* FLOATING ACTION BUTTON */}
             {isAdmin && !selectedDetailCustomer && (
-                <button 
-                    onClick={() => { setSelectedCustomer(''); setShowAddModal(true); }}
-                    className="fixed bottom-[140px] right-6 md:bottom-28 md:right-10 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-blue-700 hover:scale-110 transition-all z-40 animate-in zoom-in duration-300"
-                    title="Add Debt"
-                >
-                    <Plus size={32} strokeWidth={3} />
-                </button>
+                <button onClick={() => handleOpenAdd()} className="fixed bottom-[140px] right-6 md:bottom-28 md:right-10 w-16 h-16 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"><Plus size={36} strokeWidth={3} /></button>
             )}
 
-            {/* FULL SCREEN DETAIL VIEW */}
             {selectedDetailCustomer && (
-                <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-900 flex flex-col animate-in slide-in-from-right duration-200">
-                    <div className="bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 shadow-sm shrink-0 z-10">
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex gap-3 items-center">
-                                <button onClick={() => setSelectedDetailCustomer(null)} className="mr-1 text-gray-500"><ChevronLeft size={28} /></button>
-                                <div className="w-12 h-12 rounded-full bg-orange-500 text-white flex items-center justify-center text-lg font-bold ring-4 ring-orange-100 dark:ring-orange-900/30">{getInitials(selectedDetailCustomer.name)}</div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white leading-none mb-1">{selectedDetailCustomer.name}</h2>
-                                    <p className="text-sm text-gray-500">Balance: <span className="font-bold text-red-600 text-lg">₱{selectedDetailCustomer.displayDebt.toLocaleString()}</span></p>
+                <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300 transition-colors">
+                    <div className="bg-white dark:bg-slate-900 p-6 border-b-2 dark:border-slate-800 shadow-sm shrink-0 transition-colors">
+                        <div className="flex justify-between items-start mb-6">
+                            <div className="flex gap-4 items-center">
+                                <button onClick={() => { setSelectedDetailCustomer(null); setDetailSearch(''); }} className="p-2 -ml-2 text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-white transition-colors"><ChevronLeft size={32}/></button>
+                                <div className="w-14 h-14 rounded-[1.5rem] bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center text-xl font-black shadow-lg">{getInitials(selectedDetailCustomer.name)}</div>
+                                <div><h2 className="text-2xl font-black text-gray-900 dark:text-white leading-none uppercase tracking-tight">{selectedDetailCustomer.name}</h2><p className="text-xs text-gray-500 dark:text-slate-400 font-bold mt-1 tracking-widest">{selectedDetailCustomer.phone}</p></div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1">Balance</p>
+                                {/* CRITICAL FIX: Use calculated live balance instead of cached value */}
+                                <p className="text-3xl font-black text-red-600 dark:text-rose-400 font-mono tracking-tighter">₱{liveCustomerBalance.toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-4">
+                            <div className="flex-1 relative"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" /><input type="text" placeholder="Filter..." className="w-full pl-10 pr-4 py-3 rounded-2xl bg-gray-50 dark:bg-slate-950 border dark:border-slate-800 outline-none font-bold text-sm shadow-inner transition-all dark:text-slate-200" value={detailSearch} onChange={e => setDetailSearch(e.target.value)} /></div>
+                            <div className="relative shrink-0"><Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400" /><input type="date" className="pl-10 pr-4 py-3 rounded-2xl bg-gray-50 dark:bg-slate-950 border dark:border-slate-800 outline-none font-bold text-sm shadow-inner w-full md:w-48 transition-all dark:text-slate-200" value={detailFilterDate} onChange={e => setDetailFilterDate(e.target.value)} /></div>
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar shrink-0">
+                                <button onClick={handleSendSMS} className="p-3.5 bg-gray-50 dark:bg-slate-800 rounded-2xl text-gray-600 dark:text-slate-300 border dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700 transition-all shadow-sm"><MessageSquare size={18}/></button>
+                                <button onClick={() => { setRepayCustomer(selectedDetailCustomer.id); setRepayCategory(''); setRepayAmount(''); setShowRepayModal(true); }} className="whitespace-nowrap bg-green-600 dark:bg-emerald-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all"><Wallet size={16}/> Pay</button>
+                                <button onClick={() => handleOpenAdd(selectedDetailCustomer)} className="whitespace-nowrap bg-red-600 dark:bg-rose-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-95 transition-all"><Plus size={16}/> Credit</button>
+                                <button onClick={() => window.print()} className="p-3.5 bg-gray-50 dark:bg-slate-800 rounded-2xl text-gray-600 dark:text-slate-300 border dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm"><Printer size={18}/></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 pb-[140px] bg-gray-50/50 dark:bg-slate-950 scroll-smooth transition-colors"><div className="max-w-6xl mx-auto printable-content">{renderLedger(selectedDetailCustomer.id)}</div></div>
+                </div>
+            )}
+
+            {showAddModal && (
+                <div className="fixed inset-0 bg-black/60 dark:bg-slate-950/80 backdrop-blur-sm z-[80] flex items-center justify-center sm:p-4">
+                    <div className="bg-white dark:bg-slate-900 sm:rounded-[2.5rem] shadow-2xl dark:shadow-premium-dark w-full max-w-6xl h-full sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b dark:border-slate-800 bg-gray-50 dark:bg-slate-950 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <Plus size={20} strokeWidth={3} className="text-blue-600 dark:text-blue-400" />
+                                <h3 className="text-lg font-black uppercase tracking-tight text-gray-800 dark:text-white">Transaction Builder</h3>
+                            </div>
+                            <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-slate-800 rounded-full transition-all text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={24} /></button>
+                        </div>
+                        {modalStep === 'SELECT_CUSTOMER' ? (
+                            <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-950 overflow-hidden">
+                                <div className="p-6 shrink-0 border-b dark:border-slate-800 bg-white dark:bg-slate-900">
+                                    <h4 className="text-xl font-black text-gray-800 dark:text-white mb-4 uppercase tracking-widest">Select Account</h4>
+                                    <div className="relative"><Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" /><input type="text" autoFocus placeholder="Search..." className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-transparent focus:border-blue-500 bg-gray-100 dark:bg-slate-800 outline-none font-bold shadow-inner dark:text-slate-200 transition-all" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setModalCustPage(1); }} /></div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                    {filteredCustomers.slice((modalCustPage - 1) * modalCustItemsPerPage, modalCustPage * modalCustItemsPerPage).map(c => (
+                                        <div key={c.id} onClick={() => { setSelectedCustomer(c); setModalStep('WORKSPACE'); }} className="aspect-[4/5] rounded-[2rem] p-6 shadow-lg dark:shadow-premium-dark bg-white dark:bg-slate-900 flex flex-col justify-between cursor-pointer hover:border-blue-500 border-4 border-transparent transition-all group">
+                                            <div className="flex-1 flex items-center justify-center"><div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center text-2xl font-black group-hover:scale-110 transition-transform">{getInitials(c.name)}</div></div>
+                                            <div><h5 className="text-lg font-black text-gray-800 dark:text-slate-100 truncate">{c.name}</h5><p className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">{c.phone}</p></div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                            <button onClick={() => setSelectedDetailCustomer(null)} className="bg-gray-100 dark:bg-gray-700 p-2 rounded-full text-gray-500"><X size={20} /></button>
-                        </div>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                                <input type="date" className="pl-9 pr-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border-none outline-none dark:text-white" value={detailDateFilter} onChange={e => setDetailDateFilter(e.target.value)} />
-                            </div>
-                            {detailDateFilter && <button onClick={() => setDetailDateFilter(getTodayString())} className="text-sm text-blue-600 font-bold hover:underline">Reset Today</button>}
-                        </div>
-                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                             <button onClick={() => handleSendSMS(selectedDetailCustomer)} className="p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300"><MessageSquare size={20} /></button>
-                             <button onClick={() => { setRepayCustomer(selectedDetailCustomer.id); setRepayCategory(''); setShowRepayModal(true); }} className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-blue-500/20"><Wallet size={18} /> Repay</button>
-                             <button onClick={() => { setSelectedCustomer(selectedDetailCustomer.id); setShowAddModal(true); setAddDebtMode('product'); }} className="flex-1 bg-red-600 text-white px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-red-500/20"><Plus size={18} /> Add Debt</button>
-                             <button onClick={() => generateReport(selectedDetailCustomer.id)} className="px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300"><FileText size={18} /></button>
-                        </div>
-                    </div>
-                    {/* pb-[130px] ensures Detail View content isn't covered by ad/nav bar */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-[130px] bg-gray-50/50 dark:bg-gray-900/50">
-                        {renderLedgerList(selectedDetailCustomer.id)}
-                    </div>
-                    
-                    {/* TRASH DROP ZONE (Visible during Drag) */}
-                    {draggedTxnId && (
-                        <div 
-                            onDragOver={onDragOverTrash}
-                            onDragLeave={() => setIsOverTrash(false)}
-                            onDrop={onDropTrash}
-                            className={`fixed bottom-0 inset-x-0 h-32 z-[100] transition-all duration-300 flex flex-col items-center justify-center gap-2 ${isOverTrash ? 'bg-red-600 text-white shadow-[0_-10px_30px_rgba(220,38,38,0.5)]' : 'bg-red-500/90 text-white backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.2)]'}`}
-                        >
-                            <Trash2 size={40} className={`transition-transform duration-300 ${isOverTrash ? 'scale-125 rotate-12' : 'animate-bounce'}`} />
-                            <p className="font-black uppercase tracking-widest text-sm drop-shadow-md">{isOverTrash ? 'Release to Delete' : `Drop ${draggedTxnType === 'DEBT' ? 'Debt' : 'Payment'} here to Delete`}</p>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* DELETE CONFIRMATION MODAL */}
-            {showDeleteModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 text-center">
-                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <ShieldAlert size={32} />
-                        </div>
-                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight mb-2">Confirm Deletion</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">You are about to permanently remove a financial record. Please enter your <b>Admin Password</b> to proceed.</p>
-                        
-                        <div className="space-y-4">
-                            <div className="relative">
-                                <input 
-                                    type={showDeletePass ? "text" : "password"} 
-                                    autoFocus
-                                    placeholder="Enter password"
-                                    value={deletePassInput}
-                                    onChange={(e) => setDeletePassInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && confirmDelete()}
-                                    className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl text-center font-bold outline-none focus:border-red-500 transition-all dark:text-white pr-12"
-                                />
-                                <button 
-                                    type="button"
-                                    onClick={() => setShowDeletePass(!showDeletePass)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                >
-                                    {showDeletePass ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
-                            </div>
-                            <div className="flex gap-3">
-                                <button 
-                                    onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); setDeletePassInput(''); }}
-                                    className="flex-1 py-3.5 rounded-xl font-bold text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors uppercase tracking-widest"
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    onClick={confirmDelete}
-                                    className="flex-1 py-3.5 rounded-xl font-bold text-sm text-white bg-red-600 hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 uppercase tracking-widest"
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* TRANSACTION ITEMS MODAL */}
-            {viewingTxnItems && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
-                            <div>
-                                <h3 className="font-black text-gray-800 dark:text-white uppercase tracking-wider text-sm">Transaction Breakdown</h3>
-                                <p className="text-[10px] text-gray-500 font-bold uppercase">{new Date(viewingTxnItems.date).toLocaleString()}</p>
-                            </div>
-                            <button onClick={() => setViewingTxnItems(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
-                        </div>
-                        <div className="p-4 overflow-y-auto max-h-[60vh]">
-                            <table className="w-full text-left text-sm border-collapse">
-                                <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b dark:border-gray-700">
-                                    <tr><th className="px-3 py-2">Item Name</th><th className="px-3 py-2 text-center">Qty</th><th className="px-3 py-2 text-right">Price</th><th className="px-3 py-2 text-right">Total</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {viewingTxnItems.items.map((item: OrderItem, idx: number) => (
-                                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                            <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-200">{item.productName}</td>
-                                            <td className="px-3 py-3 text-center text-gray-500 font-mono">x{item.quantity}</td>
-                                            <td className="px-3 py-3 text-right text-gray-500 font-mono">₱{item.price.toLocaleString()}</td>
-                                            <td className="px-3 py-3 text-right font-black text-gray-900 dark:text-white font-mono">₱{(item.price * item.quantity).toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot className="bg-gray-50 dark:bg-gray-900 font-black border-t dark:border-gray-700">
-                                    <tr>
-                                        <td colSpan={3} className="px-3 py-3 text-right text-gray-500 uppercase text-[10px] tracking-widest">Grand Total</td>
-                                        <td className="px-3 py-3 text-right text-red-600 text-lg font-mono">₱{viewingTxnItems.amount.toLocaleString()}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                        <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t dark:border-gray-700 flex gap-2">
-                             <button onClick={() => window.print()} className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"><Printer size={16} /> Print Receipt</button>
-                             <button onClick={() => setViewingTxnItems(null)} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center transition-colors hover:bg-blue-700">Close View</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* REPAY MODAL */}
-            {showRepayModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
-                        <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center"><Wallet size={20} className="mr-2 text-blue-600" /> Record Repayment</h3><button onClick={() => setShowRepayModal(false)}><X size={20} className="text-gray-400" /></button></div>
-                        <div className="space-y-4">
-                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Debt Category</label><select className="w-full p-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={repayCategory} onChange={e => setRepayCategory(e.target.value)}><option value="">-- Select Category --</option>{categorySuggestions.map(cat => (<option key={cat} value={cat}>{cat}</option>))}</select></div>
-                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount to Pay</label><div className="relative"><span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">₱</span><input type="number" className="w-full pl-8 p-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0.00" value={repayAmount} onChange={e => setRepayAmount(e.target.value)} /></div></div>
-                            <button onClick={submitRepayment} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition-colors">Confirm Payment</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            
-            {/* ADD DEBT MODAL (MAXIMIZED POS UI) */}
-            {showAddModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center sm:p-4">
-                    <div className={`bg-white dark:bg-gray-800 sm:rounded-2xl shadow-2xl w-full p-0 flex flex-col overflow-hidden transition-all duration-300 ${addDebtMode === 'product' ? 'max-w-6xl h-full sm:h-[90vh]' : 'max-w-lg rounded-2xl mx-4'}`}>
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 shrink-0">
-                            <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center"><Plus size={20} className="mr-2 text-blue-600" />Add Debt Record</h3>
-                            <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
-                        </div>
-                        <div className="p-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shrink-0">
-                            <div className="flex bg-gray-200 dark:bg-gray-700 p-1 rounded-lg max-w-sm mx-auto">
-                                <button onClick={() => setAddDebtMode('product')} className={`flex-1 py-1.5 text-xs font-bold rounded-md flex items-center justify-center transition-all ${addDebtMode === 'product' ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-600 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}><ShoppingBag size={14} className="mr-1.5" /> SHOP</button>
-                                <button onClick={() => setAddDebtMode('manual')} className={`flex-1 py-1.5 text-xs font-bold rounded-md flex items-center justify-center transition-all ${addDebtMode === 'manual' ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-600 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}><PenTool size={14} className="mr-1.5" /> MANUAL</button>
-                            </div>
-                        </div>
-                        {addDebtMode === 'product' && addDebtStep === 'select' && (
-                            <div className="px-4 pt-3 pb-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex gap-6 shrink-0 lg:hidden overflow-x-auto">
-                                <button onClick={() => setShopSubTab('products')} className={`pb-2 text-sm font-black border-b-4 transition-colors whitespace-nowrap ${shopSubTab === 'products' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>BROWSE PRODUCTS</button>
-                                <button onClick={() => setShopSubTab('cart')} className={`pb-2 text-sm font-black border-b-4 transition-colors flex items-center gap-2 whitespace-nowrap ${shopSubTab === 'cart' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>MY QUEUE {selectedProducts.length > 0 && <span className="bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full">{selectedProducts.reduce((a, b) => a + b.qty, 0)}</span>}</button>
-                            </div>
-                        )}
-                        <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/30 dark:bg-gray-800/30">
-                            {addDebtMode === 'product' ? (
-                                addDebtStep === 'select' ? (
-                                    <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-                                        {(shopSubTab === 'products' || window.innerWidth >= 1024) && (
-                                            <div className="flex-1 flex flex-col min-h-0 p-4 border-r border-gray-100 dark:border-gray-700">
-                                                <div className="flex flex-col sm:flex-row gap-3 mb-4 shrink-0">
-                                                    <select className="flex-1 p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-800 dark:text-white outline-none shadow-sm focus:ring-2 focus:ring-blue-500" value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}>
-                                                        <option value="">-- Choose Customer --</option>
-                                                        {MockService.getCustomers().map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                                                    </select>
-                                                    <div className="relative flex-[2]">
-                                                        <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                                        <input 
-                                                            type="text" 
-                                                            placeholder="Search products..." 
-                                                            className="w-full pl-10 pr-10 py-3 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none shadow-sm focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" 
-                                                            value={shopSearch} 
-                                                            onChange={(e) => setShopSearch(e.target.value)} 
-                                                        />
-                                                        {shopSearch && (
-                                                            <button 
-                                                                onClick={() => setShopSearch('')}
-                                                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                                            >
-                                                                <X size={18} />
-                                                            </button>
-                                                        )}
+                        ) : (
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                <div className="flex bg-white dark:bg-slate-900 border-b dark:border-slate-800 shrink-0">
+                                    <button onClick={() => setWorkspaceTab('CATALOG')} className={`flex-1 flex items-center justify-center gap-2 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-4 ${workspaceTab === 'CATALOG' ? 'border-blue-600 dark:border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-500/5' : 'border-transparent text-gray-400 dark:text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><PackageSearch size={18} />Catalog</button>
+                                    <button onClick={() => setWorkspaceTab('QUEUE')} className={`flex-1 flex items-center justify-center gap-2 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-4 relative ${workspaceTab === 'QUEUE' ? 'border-blue-600 dark:border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-500/5' : 'border-transparent text-gray-400 dark:text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><ClipboardList size={18} />Queue{(selectedProducts.length > 0 || manualEntry.amount) && <span className="absolute top-2 right-4 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-sm">{selectedProducts.length + (manualEntry.amount ? 1 : 0)}</span>}</button>
+                                </div>
+                                <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/30 dark:bg-slate-950/30">
+                                    {workspaceTab === 'CATALOG' && (
+                                        <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300">
+                                            <div className="p-6 bg-white dark:bg-slate-900 border-b dark:border-slate-800 space-y-4 shadow-sm shrink-0">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black">{getInitials(selectedCustomer?.name || '??')}</div>
+                                                        <div><h4 className="font-black text-gray-800 dark:text-slate-100 uppercase leading-none">{selectedCustomer?.name}</h4><button onClick={() => setModalStep('SELECT_CUSTOMER')} className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-1 hover:underline">Change</button></div>
                                                     </div>
-                                                    <select className="flex-1 p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-medium outline-none shadow-sm focus:ring-2 focus:ring-blue-500 dark:text-white" value={shopCategory} onChange={(e) => setShopCategory(e.target.value)}>
-                                                        {productCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                                    </select>
+                                                    <div className="relative"><Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" /><input type="datetime-local" className="pl-9 pr-4 py-2 bg-gray-100 dark:bg-slate-800 rounded-xl text-xs font-bold border-none outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 transition-all" value={debtDate} onChange={e => setDebtDate(e.target.value)} /></div>
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto pr-1 pb-4">
-                                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                                                        {filteredShopProducts.length === 0 ? (
-                                                            <div className="col-span-full py-20 text-center text-gray-400"><Package size={48} className="mx-auto mb-2 opacity-20" /><p className="text-sm">No products found</p></div>
-                                                        ) : (
-                                                            filteredShopProducts.map(product => {
-                                                                const inCart = selectedProducts.find(p => p.product.id === product.id);
-                                                                return (
-                                                                    <div key={product.id} onClick={() => handleAddProduct(product.id)} className={`relative aspect-square bg-white dark:bg-gray-900 rounded-2xl overflow-hidden group shadow-md cursor-pointer transition-all active:scale-95 border-2 ${inCart ? 'border-blue-500 scale-[0.98]' : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700'}`}>
-                                                                        <img src={product.imageUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-90" alt="" />
-                                                                        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
-                                                                        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end z-10">
-                                                                            {inCart && <div className="bg-blue-600 text-white text-[12px] font-black w-7 h-7 flex items-center justify-center rounded-full shadow-lg border-2 border-white animate-in zoom-in">{inCart.qty}</div>}
-                                                                        </div>
-                                                                        <div className="absolute bottom-0 left-0 w-full p-3 flex flex-col z-10 text-left">
-                                                                            <span className="text-white/60 text-[9px] uppercase font-black tracking-widest leading-none mb-1">{product.category}</span>
-                                                                            <h3 className="text-white text-xs font-bold leading-tight line-clamp-1 mb-1">{product.name}</h3>
-                                                                            <div className="flex items-center justify-between mt-1">
-                                                                                <span className="text-white font-black text-sm">₱{product.price.toLocaleString()}</span>
-                                                                                <div className="bg-blue-600/90 text-white p-1 rounded-lg backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"><Plus size={14} strokeWidth={3} /></div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </div>
-                                                </div>
+                                                <div className="flex gap-3"><div className="flex-1 relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" /><input type="text" placeholder="Search..." className="w-full pl-9 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none border-none shadow-inner dark:text-slate-200 transition-all" value={shopSearch} onChange={e => { setShopSearch(e.target.value); setModalProdPage(1); }} /></div><select className="px-4 py-2 bg-gray-100 dark:bg-slate-800 dark:text-slate-200 rounded-xl text-sm font-bold outline-none border-none focus:ring-2 focus:ring-blue-500 transition-all" value={shopCategory} onChange={e => { setShopCategory(e.target.value); setModalProdPage(1); }}>{productCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>
                                             </div>
-                                        )}
-                                        {(shopSubTab === 'cart' || window.innerWidth >= 1024) && (
-                                            <div className={`flex flex-col min-h-0 bg-white dark:bg-gray-900 shadow-xl z-20 shrink-0 ${window.innerWidth < 1024 ? 'flex-1' : 'w-[360px] border-l border-gray-100 dark:border-gray-700'}`}>
-                                                <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                                                    <h4 className="font-black text-gray-800 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider"><ShoppingCart size={18} className="text-blue-600" /> Transaction Queue</h4>
-                                                    <span className="text-[10px] font-black bg-blue-600 text-white px-2 py-1 rounded-full">{selectedProducts.length} ITEMS</span>
-                                                </div>
-                                                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                                                    {selectedProducts.length === 0 ? (
-                                                        <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs py-20 opacity-30 text-center"><ShoppingBag size={48} className="mb-4" /><p className="font-bold">YOUR QUEUE IS EMPTY<br/>Pick products from the store</p></div>
-                                                    ) : (
-                                                        selectedProducts.map((item) => (
-                                                            <div key={item.product.id} className="flex gap-3 items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 text-left hover:border-blue-200 transition-colors">
-                                                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white shadow-sm border border-gray-100 shrink-0"><img src={item.product.imageUrl} className="w-full h-full object-cover" alt="" /></div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="font-black text-gray-800 dark:text-white text-[12px] truncate mb-1">{item.product.name}</p>
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <button onClick={() => handleUpdateQty(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-700 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-500 hover:text-red-500 active:scale-90"><Minus size={12} strokeWidth={3} /></button>
-                                                                            <button onClick={() => openNumpad(item.product.id, item.qty)} className="text-[14px] font-black text-blue-600 w-6 text-center">{item.qty}</button>
-                                                                            <button onClick={() => handleUpdateQty(item.product.id, 1)} className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-700 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-500 hover:text-green-500 active:scale-90"><Plus size={12} strokeWidth={3} /></button>
-                                                                        </div>
-                                                                        <span className="text-[12px] font-black text-gray-900 dark:text-white">₱{(item.product.price * item.qty).toLocaleString()}</span>
-                                                                    </div>
-                                                                </div>
-                                                                <button onClick={() => handleRemoveProduct(item.product.id)} className="text-gray-300 hover:text-red-500 transition-colors shrink-0"><Trash2 size={16} /></button>
-                                                            </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                                <div className="p-6 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 space-y-4">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Total Amount</span>
-                                                        <span className="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">₱{selectedProducts.reduce((s, i) => s + (i.product.price * i.qty), 0).toLocaleString()}</span>
-                                                    </div>
-                                                    <button onClick={handleProceedToAssign} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/30 flex justify-center items-center hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale uppercase tracking-widest text-sm" disabled={selectedProducts.length === 0 || !selectedCustomer}>Review & Confirm <ArrowIcon size={20} className="ml-2" /></button>
-                                                </div>
+                                            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 scrollbar-hide">
+                                                {filteredProducts.slice((modalProdPage-1)*modalProdItemsPerPage, modalProdPage*modalProdItemsPerPage).map(product => {
+                                                    const inCart = selectedProducts.find(p => p.product.id === product.id);
+                                                    return (
+                                                        <div key={product.id} onClick={() => handleAddProduct(product.id)} className={`relative bg-white dark:bg-slate-900 rounded-2xl shadow-sm dark:shadow-premium-dark border overflow-hidden flex flex-col group transition-all hover:shadow-xl hover:-translate-y-1 active:scale-95 ${inCart ? 'border-blue-500' : 'border-gray-100 dark:border-slate-800'}`}>
+                                                            <div className="aspect-square relative"><img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />{inCart && <div className="absolute top-2 right-2 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center font-black text-xs border-2 border-white shadow-lg animate-in zoom-in">{inCart.qty}</div>}<div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent"><p className="text-white font-black text-xs">₱{product.price.toLocaleString()}</p></div></div>
+                                                            <div className="p-3"><h4 className="font-bold text-gray-900 dark:text-slate-200 text-[11px] line-clamp-2 h-8 leading-tight">{product.name}</h4></div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900 overflow-hidden animate-in fade-in duration-300">
-                                        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                                            <div className="text-left">
-                                                <h4 className="font-black text-gray-800 dark:text-white text-sm uppercase tracking-widest">Review Categories</h4>
-                                                <p className="text-[10px] text-gray-500 font-bold uppercase">Assign items to specific debt groups</p>
-                                            </div>
-                                            <button onClick={() => setAddDebtStep('select')} className="text-xs text-blue-600 font-black flex items-center hover:bg-blue-50 dark:hover:bg-blue-900/30 px-3 py-1.5 rounded-full transition-colors"><ChevronLeft size={16} className="mr-1" /> BACK TO STORE</button>
                                         </div>
-                                        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-left">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {selectedProducts.map(item => (
-                                                    <div key={item.product.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-3xl border-2 border-gray-100 dark:border-gray-700 transition-all hover:border-blue-400">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white shrink-0 shadow-md border border-gray-100"><img src={item.product.imageUrl} className="w-full h-full object-cover" alt="" /></div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <h4 className="font-black text-gray-900 dark:text-white text-sm truncate leading-tight">{item.product.name}</h4>
-                                                                <div className="flex items-center gap-2 mt-1.5">
-                                                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase">QTY: {item.qty}</span>
-                                                                    <span className="text-sm font-black text-red-600">₱{(item.product.price * item.qty).toLocaleString()}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Debt Category / Group</label>
-                                                            <input type="text" list="category-suggestions" className="w-full text-sm p-3.5 bg-white dark:bg-gray-700 rounded-2xl border-2 border-gray-100 dark:border-gray-600 font-bold text-blue-600 outline-none focus:border-blue-500 shadow-sm" placeholder="e.g. Rice Loan, Grocery..." value={debtAssignments[item.product.id] || ''} onChange={(e) => setDebtAssignments({ ...debtAssignments, [item.product.id]: e.target.value })} />
-                                                        </div>
+                                    )}
+                                    {workspaceTab === 'QUEUE' && (
+                                        <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-2 duration-300">
+                                            <div className="p-6 bg-gray-50 dark:bg-slate-950 border-b dark:border-slate-800 shrink-0"><h5 className="font-black text-[10px] uppercase tracking-widest text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2">Manual Entry</h5><div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed border-blue-200 dark:border-blue-900 space-y-3 shadow-inner"><div className="grid grid-cols-2 gap-3"><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-red-600 dark:text-rose-500 font-black">₱</span><input type="number" className="w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-slate-950 dark:text-slate-200 rounded-xl text-sm font-black focus:ring-2 focus:ring-blue-500 outline-none border-none transition-all" placeholder="Amt" value={manualEntry.amount} onChange={e=>setManualEntry({...manualEntry, amount: e.target.value})} /></div><input type="text" list="ledger-cats-ws" className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-950 dark:text-slate-200 rounded-xl text-sm font-bold text-blue-600 dark:text-blue-400 outline-none border-none transition-all" placeholder="Cat" value={manualEntry.category} onChange={e=>setManualEntry({...manualEntry, category: e.target.value})} /></div><input type="text" className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-950 dark:text-slate-200 rounded-xl text-xs font-medium border-none outline-none transition-all" placeholder="Notes..." value={manualEntry.description} onChange={e=>setManualEntry({...manualEntry, description: e.target.value})} /></div></div>
+                                            <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-hide">
+                                                {selectedProducts.slice((modalQueuePage - 1) * modalQueueItemsPerPage, modalQueuePage * modalQueueItemsPerPage).map(item => (
+                                                    <div key={item.product.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border dark:border-slate-800 group transition-all hover:border-blue-500 shadow-sm dark:shadow-premium-dark relative overflow-hidden">
+                                                        <div className="flex gap-4"><div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-slate-800 shrink-0 shadow-inner"><img src={item.product.imageUrl} className="w-full h-full object-cover" alt="" /></div><div className="flex-1 min-w-0"><div className="flex justify-between items-start"><h6 className="font-black text-sm text-gray-800 dark:text-slate-100 truncate">{item.product.name}</h6><button onClick={() => setSelectedProducts(selectedProducts.filter(p=>p.product.id !== item.product.id))} className="p-1 text-gray-300 dark:text-slate-600 hover:text-red-600 dark:hover:text-rose-500 hover:bg-red-50 dark:hover:bg-rose-500/10 rounded-lg transition-all"><Trash2 size={16}/></button></div><div className="flex items-center justify-between mt-3"><div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-xl p-1"><button onClick={() => handleUpdateQty(item.product.id, -1)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-red-500 shadow-sm transition-all"><Minus size={14}/></button><button onClick={() => { setNumpadTargetId(item.product.id); setNumpadInitialValue(item.qty); setShowNumpad(true); }} className="w-10 font-black text-blue-600 dark:text-blue-400 text-sm text-center">{item.qty}</button><button onClick={() => handleUpdateQty(item.product.id, 1)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-green-500 shadow-sm transition-all"><Plus size={14}/></button></div><div className="text-right"><p className="font-black text-base text-gray-900 dark:text-white">₱{(item.product.price * item.qty).toLocaleString()}</p></div></div></div></div>
+                                                        <div className="pt-3 border-t dark:border-slate-800 mt-4 flex items-center gap-3"><span className="text-[9px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">Category:</span><input type="text" list="ledger-cats-ws" className="flex-1 bg-gray-50 dark:bg-slate-950 dark:text-blue-400 border-none px-3 py-1.5 rounded-lg text-[11px] font-black text-blue-600 focus:ring-1 focus:ring-blue-500 outline-none transition-all" value={debtAssignments[item.product.id] || ''} onChange={e=>setDebtAssignments({...debtAssignments, [item.product.id]: e.target.value})} placeholder="e.g. Loan" /></div>
                                                     </div>
                                                 ))}
                                             </div>
+                                            <div className="p-8 bg-white dark:bg-slate-900 border-t-4 border-gray-50 dark:border-slate-950 space-y-6 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-premium-dark"><div className="flex justify-between items-center"><div><span className="text-[11px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-[0.2em]">Total</span></div><span className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter">₱{(selectedProducts.reduce((s, i) => s + (i.product.price * i.qty), 0) + (parseFloat(manualEntry.amount) || 0)).toLocaleString()}</span></div><button onClick={submitDebt} disabled={(selectedProducts.length === 0 && !manualEntry.amount) || !selectedCustomer} className="w-full bg-blue-600 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-500/30 transition-all hover:bg-blue-700 active:scale-95 disabled:grayscale disabled:opacity-30 flex items-center justify-center gap-3"><CheckCircle size={20} />Commit</button></div>
                                         </div>
-                                        <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-                                            <div className="max-w-4xl mx-auto">
-                                                <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                                                    <div className="text-center sm:text-left">
-                                                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Charging Account</p>
-                                                        <p className="font-black text-blue-600 text-2xl leading-none">{MockService.getCustomers().find(c => c.id === selectedCustomer)?.name}</p>
-                                                    </div>
-                                                    <div className="text-center sm:text-right">
-                                                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Grand Total Debt</p>
-                                                        <p className="font-black text-red-600 text-4xl tracking-tighter leading-none">₱{selectedProducts.reduce((s, i) => s + (i.product.price * i.qty), 0).toLocaleString()}</p>
-                                                    </div>
-                                                </div>
-                                                <button onClick={submitDebt} className="w-full bg-red-600 text-white py-5 rounded-3xl font-black shadow-2xl shadow-red-500/30 flex justify-center items-center hover:bg-red-700 transition-all active:scale-[0.98] uppercase tracking-widest text-lg">CONFIRM & RECORD DEBT <Check size={24} className="ml-2" strokeWidth={4} /></button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            ) : (
-                                <div className="space-y-6 p-8 max-w-lg mx-auto animate-in fade-in duration-300 text-left">
-                                    <div className="space-y-5">
-                                        <div>
-                                            <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Select Customer</label>
-                                            <select className="w-full p-4 border-2 border-gray-100 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 font-bold text-gray-800 dark:text-white outline-none focus:border-blue-500 shadow-sm" value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">-- Choose Account --</option>{MockService.getCustomers().map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Debt Amount</label>
-                                                <div className="relative">
-                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-400">₱</span>
-                                                    <input type="number" className="w-full pl-9 p-4 border-2 border-gray-100 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-800 font-black text-2xl text-red-600 outline-none focus:border-red-500 shadow-sm" placeholder="0.00" value={manualForm.amount} onChange={e => setManualForm({ ...manualForm, amount: e.target.value })} />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Category</label>
-                                                <input type="text" list="category-suggestions" className="w-full p-4 border-2 border-gray-100 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-800 font-bold text-blue-600 outline-none focus:border-blue-500 shadow-sm" placeholder="General" value={manualForm.category} onChange={e => setManualForm({ ...manualForm, category: e.target.value })} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Transaction Timestamp</label>
-                                            <input type="datetime-local" className="w-full p-4 border-2 border-gray-100 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 font-bold text-gray-700 dark:text-white outline-none focus:border-blue-500 shadow-sm" value={debtDate} onChange={e => setDebtDate(e.target.value)} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Internal Notes (Optional)</label>
-                                            <textarea className="w-full p-4 border-2 border-gray-100 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 font-medium text-gray-700 dark:text-white outline-none focus:border-blue-500 shadow-sm h-28 resize-none" placeholder="Add specific details or items..." value={manualForm.description} onChange={e => setManualForm({ ...manualForm, description: e.target.value })}></textarea>
-                                        </div>
-                                    </div>
-                                    <button onClick={submitDebt} disabled={!selectedCustomer || !manualForm.amount} className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black shadow-2xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-widest text-lg">Record Transaction</button>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* SOA REPORT MODAL */}
-            {showReportModal && reportData && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95">
-                        <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
-                            <div>
-                                <h3 className="font-black uppercase tracking-widest text-sm text-gray-800 dark:text-white">Statement of Account</h3>
-                                <p className="text-[10px] font-bold text-gray-500 uppercase">Period Snapshot: {new Date(reportData.date).toLocaleDateString()}</p>
                             </div>
-                            <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
-                        </div>
-                        
-                        <div className="flex-1 overflow-y-auto p-8 bg-white text-gray-900 printable-content">
-                             <div className="text-center mb-8 pb-8 border-b-2 border-dashed border-gray-200">
-                                 <h1 className="text-2xl font-black uppercase tracking-tighter mb-1">LEDGER CONNECT</h1>
-                                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Digital Merchant Ledger • Official SOA</p>
-                             </div>
-
-                             <div className="grid grid-cols-2 gap-8 mb-8">
-                                 <div>
-                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Bill To:</p>
-                                     <p className="font-black text-xl leading-none mb-1">{reportData.customer.name}</p>
-                                     <p className="text-sm font-bold text-gray-500">{reportData.customer.phone}</p>
-                                     <p className="text-xs text-gray-400 mt-1">{reportData.customer.address}</p>
-                                 </div>
-                                 <div className="text-right">
-                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Due:</p>
-                                     <p className="font-black text-3xl text-red-600 leading-none">₱{reportData.grandTotal.toLocaleString()}</p>
-                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Date: {new Date().toLocaleDateString()}</p>
-                                 </div>
-                             </div>
-
-                             <div className="space-y-8">
-                                 {reportData.categories.map(cat => (
-                                     <div key={cat.name} className="space-y-3">
-                                         <div className="flex justify-between items-end border-b-2 border-gray-900 pb-1">
-                                             <h4 className="font-black uppercase tracking-widest text-sm">{cat.name}</h4>
-                                             <p className="text-xs font-bold text-gray-400">Balance Group</p>
-                                         </div>
-                                         <table className="w-full text-sm">
-                                             <tbody className="divide-y border-b">
-                                                 <tr className="bg-gray-50 italic">
-                                                     <td className="py-2 pl-2">Balance Forward</td>
-                                                     <td className="py-2 text-right pr-2 font-bold font-mono">₱{cat.opening.toLocaleString()}</td>
-                                                 </tr>
-                                                 {cat.debts.map((d: any) => (
-                                                     <tr key={d.id}>
-                                                         <td className="py-2 pl-2">
-                                                             <div className="font-bold">{d.items && d.items.length > 0 ? d.items[0].productName + (d.items.length > 1 ? ` +${d.items.length-1}` : '') : (d.notes || 'Added Debt')}</div>
-                                                             <div className="text-[10px] text-gray-400 uppercase font-bold">{new Date(d.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                                                         </td>
-                                                         <td className="py-2 text-right pr-2 font-bold font-mono text-red-600">+₱{d.amount.toLocaleString()}</td>
-                                                     </tr>
-                                                 ))}
-                                                 {cat.payments.map((p: any) => (
-                                                     <tr key={p.id}>
-                                                         <td className="py-2 pl-2">
-                                                             <div className="font-bold">Payment Received</div>
-                                                             <div className="text-[10px] text-gray-400 uppercase font-bold">{new Date(p.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                                                         </td>
-                                                         <td className="py-2 text-right pr-2 font-bold font-mono text-green-600">-₱{p.amount.toLocaleString()}</td>
-                                                     </tr>
-                                                 ))}
-                                             </tbody>
-                                             <tfoot>
-                                                 <tr className="font-black bg-gray-100">
-                                                     <td className="py-2 pl-2 uppercase text-[10px] tracking-widest">Group Balance</td>
-                                                     <td className="py-2 text-right pr-2 font-mono">₱{cat.closing.toLocaleString()}</td>
-                                                 </tr>
-                                             </tfoot>
-                                         </table>
-                                     </div>
-                                 ))}
-                             </div>
-
-                             <div className="mt-12 pt-8 border-t-2 border-dashed border-gray-200 text-center">
-                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Thank you for your business</p>
-                                 <p className="text-xs text-gray-300 font-mono">Generated via Ledger Connect v1.0.0 • {new Date().toISOString()}</p>
-                             </div>
-                        </div>
-
-                        <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex gap-2 no-print">
-                             <button onClick={() => window.print()} className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"><Printer size={16} /> Print SOA</button>
-                             <button onClick={() => setShowReportModal(false)} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center transition-colors hover:bg-blue-700">Done</button>
-                        </div>
+                        )}
                     </div>
                 </div>
             )}
-
-            <datalist id="category-suggestions">{categorySuggestions.map(cat => (<option key={cat} value={cat} />))}</datalist>
-            <NumpadModal 
-                isOpen={showNumpad} 
-                initialValue={numpadInitialValue} 
-                title="Enter Quantity" 
-                onClose={() => setShowNumpad(false)} 
-                onConfirm={(val) => { 
-                    if (numpadTargetId) {
-                        setSelectedProducts(selectedProducts.map(i => i.product.id === numpadTargetId ? { ...i, qty: val } : i));
-                    }
-                }} 
-            />
+            <NumpadModal isOpen={showNumpad} initialValue={numpadInitialValue} title="Enter Quantity" onClose={() => setShowNumpad(false)} onConfirm={(val) => { if (numpadTargetId) setSelectedProducts(selectedProducts.map(i => i.product.id === numpadTargetId ? { ...i, qty: val } : i)); }} />
+            <datalist id="ledger-cats-ws">{categorySuggestions.map(cat => <option key={cat} value={cat} />)}</datalist>
         </div>
     );
 };

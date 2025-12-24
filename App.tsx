@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -13,33 +14,37 @@ import { User, Language } from './types';
 import { MockService } from './services/mockData';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { ToastContainer } from './components/Toast';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const settings = MockService.getSettings();
   const [lang, setLang] = useState<Language>(settings.language || Language.EN);
   const { showToast } = useToast();
 
-  useEffect(() => {
-      const init = async () => {
-          try {
-              // 1. Initialize Data Service
-              await MockService.initialize();
-              
-              // 2. Check for Persisted User Session
-              const savedUser = localStorage.getItem('LC_CURRENT_USER');
-              if (savedUser) {
-                  setUser(JSON.parse(savedUser));
-              }
-          } catch (e) {
-              console.error("Failed to sync data", e);
-              showToast("Failed to sync with server. Using offline data.", "error");
-          } finally {
-              setIsInitializing(false);
+  const initializeApp = async () => {
+      setInitError(null);
+      setIsInitializing(true);
+      try {
+          // Mandatory Database Sync
+          await MockService.initialize();
+          
+          const savedUser = localStorage.getItem('LC_CURRENT_USER');
+          if (savedUser) {
+              setUser(JSON.parse(savedUser));
           }
-      };
-      init();
+      } catch (e: any) {
+          console.error("Initialization failed:", e);
+          setInitError(e.message || "Failed to connect to the database. This app requires an active internet connection.");
+      } finally {
+          setIsInitializing(false);
+      }
+  };
+
+  useEffect(() => {
+      initializeApp();
   }, []);
 
   // Apply Theme Effect
@@ -78,8 +83,26 @@ function AppContent() {
 
   if (isInitializing) {
       return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+          </div>
+      );
+  }
+
+  if (initError) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle size={32} />
+              </div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Connection Required</h1>
+              <p className="text-gray-500 max-w-sm mb-6">{initError}</p>
+              <button 
+                onClick={initializeApp}
+                className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+              >
+                  <RefreshCw size={18} /> Retry Connection
+              </button>
           </div>
       );
   }
