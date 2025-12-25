@@ -1,11 +1,10 @@
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid, LayoutList, AlertTriangle, Check, ArrowRight, ChevronLeft, ChevronRight, PackagePlus } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, Product, User, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
 
-// Define local PageProps for consistency across page components
 interface PageProps {
     lang: Language;
     user: User;
@@ -13,21 +12,17 @@ interface PageProps {
 
 export const Products: React.FC<PageProps> = ({ lang, user }) => {
     const t = DICTIONARY[lang];
-    // Fix: Defined isAdmin based on user role
     const isAdmin = user.role === UserRole.ADMIN;
     const { showToast } = useToast();
 
-    // State for UI management
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-    // Fix: Defined adminMode for toggling between POS and Inventory views
     const [adminMode, setAdminMode] = useState<'inventory' | 'pos'>('inventory');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 12;
 
-    // Form state for creating/editing products
     const [formData, setFormData] = useState({
         name: '',
         category: '',
@@ -38,7 +33,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
         description: ''
     });
 
-    // Memoized product list filtering
     const filteredProducts = useMemo(() => {
         const list = MockService.getProducts();
         return list.filter(p => 
@@ -47,11 +41,9 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
         );
     }, [searchTerm]);
 
-    // Pagination logic
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-    // Fix: Defined handleOpenAdd to reset form and show modal
     const handleOpenAdd = () => {
         setEditingProduct(null);
         setFormData({ name: '', category: '', price: '', cost: '', stock: '', imageUrl: '', description: '' });
@@ -76,7 +68,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
         if (window.confirm('Delete this product permanently?')) {
             await MockService.deleteProduct(id);
             showToast('Product deleted from database', 'success');
-            // Force re-render
             setSearchTerm(prev => prev);
         }
     };
@@ -110,7 +101,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
 
     return (
         <div className="space-y-6 relative min-h-full pb-24">
-            {/* Header with Search and Mode Toggle */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sticky top-0 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md z-30 -mx-4 px-4 py-2 border-b dark:border-gray-800">
                 <div className="flex items-center gap-4">
                     <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{t.products}</h2>
@@ -139,7 +129,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             </div>
 
-            {/* Content: Grid or Table View */}
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5">
                     {paginatedProducts.map(product => (
@@ -225,7 +214,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             )}
 
-            {/* Pagination Controls */}
             {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Page {currentPage} of {totalPages}</p>
@@ -236,7 +224,6 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </div>
             )}
 
-            {/* Floating Action Button */}
             {isAdmin && adminMode === 'inventory' && (
                 <button 
                     onClick={handleOpenAdd}
@@ -247,43 +234,45 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                 </button>
             )}
 
-            {/* Modal for Add/Edit Product */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-2xl font-black text-gray-800 dark:text-white uppercase tracking-tight">{editingProduct ? 'Edit Catalog Entry' : 'New Catalog Item'}</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} /></button>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in-95 duration-200">
+                        <div className="bg-orange-600 p-6 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <PackagePlus size={20} strokeWidth={3} />
+                                <h3 className="font-black uppercase tracking-tight text-sm">{editingProduct ? 'Edit Catalog Entry' : 'New Catalog Item'}</h3>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-all"><X size={24} /></button>
                         </div>
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                        <form onSubmit={handleSubmit} className="p-8 space-y-5">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Product Name</label>
-                                    <input required type="text" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Premium Rice 25kg" />
+                                    <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Premium Rice 25kg" />
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Category</label>
-                                    <input required type="text" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="e.g. Grains, Beverages" />
+                                    <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="e.g. Grains, Beverages" />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Retail Price (₱)</label>
-                                    <input required type="number" step="0.01" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all font-mono" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
+                                    <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Capital Cost (₱)</label>
-                                    <input required type="number" step="0.01" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all font-mono" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
+                                    <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Stock Count</label>
-                                    <input required type="number" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all font-mono" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
+                                    <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Image URL</label>
-                                    <input type="text" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-orange-500 rounded-xl outline-none transition-all text-xs" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} placeholder="https://..." />
+                                    <input type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all text-xs dark:text-white font-bold" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} placeholder="https://..." />
                                 </div>
                             </div>
-                            <button type="submit" className="w-full bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-orange-700 shadow-lg shadow-orange-500/20 active:scale-95 transition-all mt-4">
-                                {editingProduct ? 'Save Stock Adjustments' : 'Commit New Product'}
+                            <button type="submit" className="w-full bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-orange-700 shadow-xl shadow-orange-500/20 active:scale-95 transition-all mt-4">
+                                {editingProduct ? 'Save Adjustments' : 'Commit New Product'}
                             </button>
                         </form>
                     </div>

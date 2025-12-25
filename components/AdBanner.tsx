@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '../config';
 import { Sparkles, X, ArrowRight } from 'lucide-react';
@@ -15,12 +16,10 @@ export const AdBanner: React.FC = () => {
         let adHeight = 60;
         let key = CONFIG.ADSTERRA.KEY;
 
-        // Mobile Breakpoint (increased to < 768px to catch tablets/large phones)
-        // If the user specified the banner is 320x50, we ensure this size is used on smaller screens
+        // Mobile Breakpoint
         if (screenWidth < 768) {
             adWidth = 320;
             adHeight = 50;
-            // Use Mobile Key if available, otherwise fallback to Main Key
             if (CONFIG.ADSTERRA.MOBILE_KEY) {
                 key = CONFIG.ADSTERRA.MOBILE_KEY;
             }
@@ -33,7 +32,7 @@ export const AdBanner: React.FC = () => {
         iframe.style.height = `${adHeight}px`;
         iframe.style.border = 'none';
         iframe.style.overflow = 'hidden';
-        iframe.style.backgroundColor = 'transparent'; // Ensure transparent background
+        iframe.style.backgroundColor = 'transparent';
         iframe.scrolling = 'no';
         iframe.title = "Advertisement";
         
@@ -70,7 +69,6 @@ export const AdBanner: React.FC = () => {
             </html>
         `;
 
-        // Clear previous content
         containerRef.current.innerHTML = '';
         containerRef.current.appendChild(iframe);
 
@@ -90,12 +88,10 @@ export const AdBanner: React.FC = () => {
     if (!CONFIG.ADSTERRA.ENABLED || !isVisible) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-slate-900 border-t border-gray-800 z-[100] shadow-[0_-4px_10px_rgba(0,0,0,0.1)] overflow-hidden print:hidden flex justify-center items-center">
+        <div className="fixed bottom-0 left-0 w-full h-[60px] bg-slate-900 border-t border-gray-800 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] overflow-hidden print:hidden flex justify-center items-center">
              
-             {/* 1. AD LAYER (Top Priority Z-Index) */}
              <div ref={containerRef} className="absolute inset-0 z-20 flex items-center justify-center w-full h-full pointer-events-auto"></div>
 
-             {/* 2. BACKUP / HOUSE AD LAYER (Bottom Z-Index) */}
              <div className="absolute inset-0 z-10 w-full h-full bg-gradient-to-r from-slate-900 to-slate-800 flex items-center justify-between px-4 sm:px-6">
                 
                 <div className="absolute inset-0 opacity-10 pointer-events-none" 
