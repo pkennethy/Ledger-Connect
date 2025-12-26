@@ -106,6 +106,9 @@ export interface SystemSettings {
   notifications: {
     email: boolean;
     push: boolean;
+    emailOnDebt: boolean;
+    emailOnPayment: boolean;
+    emailOnDeletion: boolean;
   };
   backupEmail: string;
 }

@@ -1,5 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Bell, Globe, Shield, Database, User as UserIcon, Mail, Camera, Download, Upload, Server, CheckCircle, AlertTriangle, Copy, FileText, Lock } from 'lucide-react';
+// Added Plus and Trash2 to the imports to resolve errors on lines 571 and 573
+import { Save, Bell, Globe, Shield, Database, User as UserIcon, Mail, Camera, Download, Upload, Server, CheckCircle, AlertTriangle, Copy, FileText, Lock, MailCheck, MailX, Plus, Trash2 } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, SystemSettings, User, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -538,25 +540,54 @@ create policy "Public Access Repayments" on public.repayments for all using (tru
                     {/* NOTIFICATIONS TAB */}
                     {activeTab === 'notifications' && (
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Notification Preferences</h3>
-                            <div className="space-y-4">
-                                {[
-                                    { id: 'email', label: 'Email Notifications', desc: 'Receive order summaries via email' },
-                                    { id: 'push', label: 'Push Notifications', desc: 'Real-time alerts on your device' },
-                                ].map((item) => (
-                                    <div key={item.id} className="flex justify-between items-center">
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.label}</p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc}</p>
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6 border-b border-gray-200 dark:border-gray-700 pb-2">Notification Preferences</h3>
+                            
+                            <div className="space-y-8">
+                                {/* Global Switches */}
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-500 flex items-center gap-2"><Bell size={14}/> Master Controls</h4>
+                                    {[
+                                        { id: 'email', label: 'Enable Email Notifications', desc: 'Master switch for all system emails' },
+                                        { id: 'push', label: 'Push Notifications', desc: 'Real-time alerts on your device' },
+                                    ].map((item) => (
+                                        <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-gray-50 dark:bg-slate-900/50">
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{item.label}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleToggle(item.id as any)}
+                                                className={`w-12 h-7 flex items-center rounded-full transition-all px-1 ${settings.notifications[item.id as keyof typeof settings.notifications] ? 'bg-blue-600 shadow-lg shadow-blue-600/20' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                            >
+                                                <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${settings.notifications[item.id as keyof typeof settings.notifications] ? 'translate-x-5' : 'translate-x-0'}`} />
+                                            </button>
                                         </div>
-                                        <button 
-                                            onClick={() => handleToggle(item.id as any)}
-                                            className={`w-11 h-6 flex items-center rounded-full transition-colors ${settings.notifications[item.id as keyof typeof settings.notifications] ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                        >
-                                            <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${settings.notifications[item.id as keyof typeof settings.notifications] ? 'translate-x-6' : 'translate-x-1'}`} />
-                                        </button>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+
+                                {/* Transactional Toggles */}
+                                <div className={`space-y-4 transition-opacity duration-300 ${settings.notifications.email ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-500 flex items-center gap-2"><Mail size={14}/> Transactional Emails</h4>
+                                    {[
+                                        { id: 'emailOnDebt', label: 'New Credit/Debt', icon: Plus, color: 'text-red-500' },
+                                        { id: 'emailOnPayment', label: 'Payment Collection', icon: CheckCircle, color: 'text-green-500' },
+                                        { id: 'emailOnDeletion', label: 'Record Deletion', icon: Trash2, color: 'text-gray-400' },
+                                    ].map((item) => (
+                                        <div key={item.id} className="flex justify-between items-center px-4 py-3 border-b dark:border-slate-800 last:border-0 hover:bg-gray-50 dark:hover:bg-slate-900/30 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <item.icon size={18} className={item.color} />
+                                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.label}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleToggle(item.id as any)}
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.notifications[item.id as keyof typeof settings.notifications] ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-gray-100 text-gray-400 dark:bg-slate-800 dark:text-slate-600'}`}
+                                            >
+                                                {settings.notifications[item.id as keyof typeof settings.notifications] ? <MailCheck size={12}/> : <MailX size={12}/>}
+                                                {settings.notifications[item.id as keyof typeof settings.notifications] ? 'Enabled' : 'Disabled'}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     )}

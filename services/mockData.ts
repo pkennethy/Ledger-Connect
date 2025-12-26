@@ -15,6 +15,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
     notifications: {
         email: true,
         push: true,
+        emailOnDebt: true,
+        emailOnPayment: true,
+        emailOnDeletion: true,
     },
     backupEmail: ''
 };
@@ -66,8 +69,15 @@ export const MockService = {
   // Helper to trigger email notification via Supabase Edge Function
   triggerTransactionEmail: async (customerId: string, txnType: 'DEBT' | 'REPAYMENT' | 'DELETION', amount: number, category: string) => {
       try {
+          const settings = MockService.getSettings();
+          if (!settings.notifications.email) return;
+
+          // Check granular switches
+          if (txnType === 'DEBT' && !settings.notifications.emailOnDebt) return;
+          if (txnType === 'REPAYMENT' && !settings.notifications.emailOnPayment) return;
+          if (txnType === 'DELETION' && !settings.notifications.emailOnDeletion) return;
+
           // We call the Supabase Edge Function 'transaction-report'
-          // Note: In local development, this will fail unless the function is deployed and CORS is handled.
           await supabase.functions.invoke('transaction-report', {
               body: { customerId, txnType, amount, category }
           });
@@ -91,7 +101,6 @@ export const MockService = {
     return newBalance;
   },
 
-  // Added checkTableHealth method to fix missing property errors in Layout.tsx and Settings.tsx
   checkTableHealth: async () => {
     if (!isSupabaseConfigured()) return { connected: false, tables: { customers: false, products: false, orders: false, debts: false, repayments: false } };
     try {

@@ -74,7 +74,8 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
             id: d.id,
             date: d.createdAt,
             type: 'DEBT',
-            particulars: d.items.length > 0 ? (d.items.length === 1 ? d.items[0].productName : `${d.items[0].productName} +${d.items.length - 1}`) : (d.notes || 'Manual Entry'),
+            particulars: d.items.length > 0 ? (d.items.length === 1 ? d.items[0].productName : `${d.items[0].productName} +${d.items.length - 1}`) : 'Manual Entry',
+            notes: d.notes,
             debit: d.amount,
             credit: 0,
             customerName: isAdmin ? MockService.getCustomers().find(c => c.id === d.customerId)?.name : ''
@@ -381,7 +382,12 @@ export const Reports: React.FC<PageProps> = ({ lang, user }) => {
                                                         </div>
                                                     </td>
                                                 )}
-                                                <td className="p-4 font-medium text-gray-800 dark:text-gray-200">{txn.particulars}</td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-gray-800 dark:text-gray-200">{txn.particulars}</span>
+                                                        {txn.notes && <span className="text-[10px] italic text-gray-400 dark:text-gray-500">"{txn.notes}"</span>}
+                                                    </div>
+                                                </td>
                                                 <td className="p-4 text-right font-mono font-bold text-red-600">{txn.debit > 0 ? `+₱${txn.debit.toLocaleString()}` : ''}</td>
                                                 <td className="p-4 text-right font-mono font-bold text-green-600">{txn.credit > 0 ? `-₱${txn.credit.toLocaleString()}` : ''}</td>
                                                 <td className="p-4 text-right font-mono font-black text-gray-900 dark:text-white">₱{txn.balance.toLocaleString()}</td>
