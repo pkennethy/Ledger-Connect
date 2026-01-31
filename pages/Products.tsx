@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid, LayoutList, AlertTriangle, Check, ArrowRight, ChevronLeft, ChevronRight, PackagePlus } from 'lucide-react';
+import { Search, Plus, Package, ShoppingCart, Minus, X, Trash2, Edit, LayoutGrid, LayoutList, AlertTriangle, Check, ArrowRight, ChevronLeft, ChevronRight, PackagePlus, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import { MockService } from '../services/mockData';
 import { Language, DICTIONARY, Product, User, UserRole } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -39,7 +39,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
             p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
             p.category.toLowerCase().includes(searchTerm.toLowerCase())
         );
-    }, [searchTerm]);
+    }, [searchTerm, isModalOpen]);
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -70,6 +70,14 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
             showToast('Product deleted from database', 'success');
             setSearchTerm(prev => prev);
         }
+    };
+
+    const generateRandomImage = () => {
+        const keywords = ['grocery', 'food', 'product', 'drink', 'snack', 'household'];
+        const randomKey = keywords[Math.floor(Math.random() * keywords.length)];
+        const url = `https://loremflickr.com/400/400/${randomKey}?lock=${Math.floor(Math.random() * 1000)}`;
+        setFormData({ ...formData, imageUrl: url });
+        showToast("Random image generated", "info");
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -236,7 +244,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in-95 duration-200">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in-95 duration-200">
                         <div className="bg-orange-600 p-6 text-white flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-3">
                                 <PackagePlus size={20} strokeWidth={3} />
@@ -244,36 +252,82 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                             </div>
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-all"><X size={24} /></button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-8 space-y-5">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Product Name</label>
-                                    <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Premium Rice 25kg" />
+                        <form onSubmit={handleSubmit} className="p-8">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                                {/* IMAGE PREVIEW SECTION */}
+                                <div className="md:col-span-5 space-y-4">
+                                    <div className="relative aspect-square rounded-3xl bg-gray-100 dark:bg-slate-950 border-4 border-dashed border-gray-200 dark:border-slate-800 overflow-hidden flex flex-col items-center justify-center group">
+                                        {formData.imageUrl ? (
+                                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/400?text=Invalid+Image+URL")} />
+                                        ) : (
+                                            <div className="text-center p-6">
+                                                <ImageIcon size={48} className="mx-auto text-gray-300 mb-2" />
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No Image Provided</p>
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <button type="button" onClick={generateRandomImage} className="bg-white text-orange-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 hover:scale-105 active:scale-95 transition-all">
+                                                <RefreshCw size={14} /> Random Magic
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Asset URL (JPG/PNG)</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all text-[11px] dark:text-white font-mono" 
+                                                value={formData.imageUrl} 
+                                                onChange={e => setFormData({...formData, imageUrl: e.target.value})} 
+                                                placeholder="https://example.com/image.jpg" 
+                                            />
+                                            {formData.imageUrl && (
+                                                <button type="button" onClick={() => setFormData({...formData, imageUrl: ''})} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X size={16} /></button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="col-span-2">
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Category</label>
-                                    <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="e.g. Grains, Beverages" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Retail Price (₱)</label>
-                                    <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Capital Cost (₱)</label>
-                                    <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Stock Count</label>
-                                    <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-mono font-bold dark:text-white" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Image URL</label>
-                                    <input type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all text-xs dark:text-white font-bold" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} placeholder="https://..." />
+
+                                {/* DETAILS SECTION */}
+                                <div className="md:col-span-7 space-y-5">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="col-span-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Product Designation</label>
+                                            <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Premium Rice 25kg" />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Ledger Category</label>
+                                            <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all dark:text-white font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="e.g. Grains, Beverages" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sale Price (₱)</label>
+                                            <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-black text-orange-600 text-xl font-mono" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Capital Cost (₱)</label>
+                                            <input required type="number" step="0.01" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-bold text-gray-400 font-mono" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Current Stock Level</label>
+                                            <div className="flex items-center gap-3">
+                                                <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-slate-950 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none transition-all font-black text-xl dark:text-white font-mono" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
+                                                <div className="flex flex-col gap-1 shrink-0">
+                                                    <button type="button" onClick={() => setFormData({...formData, stock: (parseInt(formData.stock || '0') + 10).toString()})} className="px-3 py-1 bg-gray-100 dark:bg-slate-800 rounded-lg text-[9px] font-black uppercase text-gray-500">+10</button>
+                                                    <button type="button" onClick={() => setFormData({...formData, stock: (parseInt(formData.stock || '0') + 50).toString()})} className="px-3 py-1 bg-gray-100 dark:bg-slate-800 rounded-lg text-[9px] font-black uppercase text-gray-500">+50</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <button type="submit" className="w-full bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-orange-700 shadow-xl shadow-orange-500/20 active:scale-95 transition-all mt-4">
-                                {editingProduct ? 'Save Adjustments' : 'Commit New Product'}
-                            </button>
+
+                            <div className="mt-10 pt-8 border-t dark:border-slate-800 flex gap-4">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-5 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 rounded-3xl font-black uppercase tracking-widest text-[11px] hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
+                                <button type="submit" className="flex-[2] bg-orange-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest text-[11px] shadow-2xl shadow-orange-500/20 hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3">
+                                    <PackagePlus size={18} />
+                                    {editingProduct ? 'Commit Adjustments' : 'Finalize Catalog Entry'}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>

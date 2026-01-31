@@ -66,18 +66,120 @@ export const MockService = {
       }
   },
 
-  // Helper to trigger email notification via Supabase Edge Function
+  /**
+   * DEEP RECALIBRATION ENGINE (v2.7)
+   * Reconstructs the entire state of the ledger by re-applying repayments to debts.
+   */
+  recalibrateAllBalances: async (onProgress?: (current: number, total: number, status: string) => void) => {
+    console.log("%c[AUDIT ENGINE] STARTING...", "color: blue; font-weight: bold; font-size: 14px;");
+    
+    // 1. Pre-init UI
+    if (onProgress) onProgress(0, 100, "Warming up engine...");
+    await new Promise(r => setTimeout(r, 300));
+
+    // 2. Safety Fetch: Ensure we have data
+    if (CACHE_CUSTOMERS.length === 0) {
+        console.log("[AUDIT ENGINE] Local cache empty, pulling fresh records...");
+        if (onProgress) onProgress(10, 100, "Downloading Master Ledger...");
+        
+        const { data: custs, error: e1 } = await supabase.from('customers').select('*');
+        const { data: debts, error: e2 } = await supabase.from('debts').select('*');
+        const { data: repays, error: e3 } = await supabase.from('repayments').select('*');
+        
+        if (e1 || e2 || e3) throw new Error("Connection failed during audit.");
+        
+        CACHE_CUSTOMERS = custs || [];
+        CACHE_DEBTS = debts || [];
+        CACHE_REPAYMENTS = repays || [];
+    }
+
+    const customers = [...CACHE_CUSTOMERS];
+    const totalCustomers = customers.length;
+    
+    if (totalCustomers === 0) {
+        console.warn("[AUDIT ENGINE] No customers found to audit.");
+        if (onProgress) onProgress(100, 100, "No data to process.");
+        return 0;
+    }
+
+    console.log(`[AUDIT ENGINE] Processing ${totalCustomers} accounts...`);
+    let processedCount = 0;
+
+    for (let i = 0; i < totalCustomers; i++) {
+        const customer = customers[i];
+        const statusMsg = `Verifying: ${customer.name}`;
+        
+        // Update UI
+        if (onProgress) onProgress(i, totalCustomers, statusMsg);
+
+        // Allow UI to breathe
+        await new Promise(r => setTimeout(r, 50));
+
+        // Logic
+        const customerDebts = CACHE_DEBTS
+            .filter(d => d.customerId === customer.id)
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        
+        const customerRepayments = CACHE_REPAYMENTS.filter(p => p.customerId === customer.id);
+
+        customerDebts.forEach(d => {
+            d.paidAmount = 0;
+            d.status = DebtStatus.UNPAID;
+        });
+
+        const paymentsByNormalizedCategory: Record<string, number> = {};
+        customerRepayments.forEach(p => {
+            const normCat = (p.category || 'General').trim().toLowerCase();
+            paymentsByNormalizedCategory[normCat] = (paymentsByNormalizedCategory[normCat] || 0) + p.amount;
+        });
+
+        for (const [normCat, totalPaid] of Object.entries(paymentsByNormalizedCategory)) {
+            let remainingPool = totalPaid;
+            const targetDebts = customerDebts.filter(d => (d.category || 'General').trim().toLowerCase() === normCat);
+
+            for (const debt of targetDebts) {
+                if (remainingPool <= 0) break;
+                const paymentToApply = Math.min(debt.amount, remainingPool);
+                debt.paidAmount = parseFloat(paymentToApply.toFixed(2));
+                remainingPool -= paymentToApply;
+                
+                if (debt.paidAmount >= debt.amount) {
+                    debt.status = DebtStatus.PAID;
+                } else if (debt.paidAmount > 0) {
+                    debt.status = DebtStatus.PARTIAL;
+                }
+            }
+        }
+
+        // Batch update this customer's debts
+        if (customerDebts.length > 0) {
+            await supabase.from('debts').upsert(customerDebts);
+        }
+
+        const actualOutstanding = customerDebts.reduce((s, d) => s + (d.amount - d.paidAmount), 0);
+        const finalBalance = Math.max(0, parseFloat(actualOutstanding.toFixed(2)));
+
+        await supabase.from('customers').update({ totalDebt: finalBalance }).eq('id', customer.id);
+        
+        customer.totalDebt = finalBalance;
+        processedCount++;
+    }
+
+    console.log("%c[AUDIT ENGINE] SUCCESS: Ledger verified.", "color: green; font-weight: bold;");
+    if (onProgress) onProgress(totalCustomers, totalCustomers, "Sync Complete!");
+    
+    await new Promise(r => setTimeout(r, 500));
+    return processedCount;
+  },
+
   triggerTransactionEmail: async (customerId: string, txnType: 'DEBT' | 'REPAYMENT' | 'DELETION', amount: number, category: string) => {
       try {
           const settings = MockService.getSettings();
           if (!settings.notifications.email) return;
-
-          // Check granular switches
           if (txnType === 'DEBT' && !settings.notifications.emailOnDebt) return;
           if (txnType === 'REPAYMENT' && !settings.notifications.emailOnPayment) return;
           if (txnType === 'DELETION' && !settings.notifications.emailOnDeletion) return;
 
-          // We call the Supabase Edge Function 'transaction-report'
           await supabase.functions.invoke('transaction-report', {
               body: { customerId, txnType, amount, category }
           });
@@ -145,14 +247,14 @@ export const MockService = {
   
   createDebt: async (debt: DebtRecord) => {
     const { error: debtErr } = await supabase.from('debts').insert(debt);
-    if (debtErr) throw debtErr;
+    if (debtErr) {
+        console.error("SUPABASE DEBT INSERT ERROR:", debtErr);
+        throw debtErr;
+    }
 
     CACHE_DEBTS.unshift(debt);
     await MockService.recalculateCustomerTotal(debt.customerId);
-    
-    // Trigger Admin Email
     await MockService.triggerTransactionEmail(debt.customerId, 'DEBT', debt.amount, debt.category);
-    
     return debt;
   },
 
@@ -165,8 +267,6 @@ export const MockService = {
 
     CACHE_DEBTS = CACHE_DEBTS.filter(d => d.id !== id);
     await MockService.recalculateCustomerTotal(customerId);
-    
-    // Trigger Admin Email for record correction
     await MockService.triggerTransactionEmail(customerId, 'DELETION', debt.amount, `Deleted Debt: ${debt.category}`);
   },
 
@@ -175,29 +275,11 @@ export const MockService = {
     if (!repay) return;
     const customerId = repay.customerId;
 
-    const { error: repayErr } = await supabase.from('repayments').delete().eq('id', id);
-    if (repayErr) throw repayErr;
-
-    const customerDebts = CACHE_DEBTS.filter(d => 
-        d.customerId === customerId && 
-        d.category === repay.category && 
-        d.paidAmount > 0
-    ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    let amountToRestore = repay.amount;
-    for (const debt of customerDebts) {
-        if (amountToRestore <= 0) break;
-        const paidOnThisDebt = Math.min(debt.paidAmount, amountToRestore);
-        debt.paidAmount -= paidOnThisDebt;
-        amountToRestore -= paidOnThisDebt;
-        debt.status = debt.paidAmount <= 0 ? DebtStatus.UNPAID : DebtStatus.PARTIAL;
-        await supabase.from('debts').update({ paidAmount: debt.paidAmount, status: debt.status }).eq('id', debt.id);
-    }
+    const { error: repayErr = {} as any } = await supabase.from('repayments').delete().eq('id', id);
+    if (repayErr && repayErr.message) throw repayErr;
 
     CACHE_REPAYMENTS = CACHE_REPAYMENTS.filter(r => r.id !== id);
     await MockService.recalculateCustomerTotal(customerId);
-    
-    // Trigger Admin Email
     await MockService.triggerTransactionEmail(customerId, 'DELETION', repay.amount, `Deleted Repayment: ${repay.category}`);
   },
   
@@ -228,8 +310,6 @@ export const MockService = {
               await supabase.from('debts').update({ paidAmount: d.paidAmount, status: d.status }).eq('id', d.id);
           }
           await MockService.recalculateCustomerTotal(customerId);
-          
-          // Trigger Admin Email
           await MockService.triggerTransactionEmail(customerId, 'REPAYMENT', totalPaid, category);
       }
   },
@@ -303,7 +383,6 @@ export const MockService = {
       if (isCash) CACHE_REPAYMENTS.unshift(...newRepayments);
       await MockService.recalculateCustomerTotal(customerId);
 
-      // Trigger Admin Email if it was a credit transaction
       if (!isCash) {
           await MockService.triggerTransactionEmail(customerId, 'DEBT', totalAmount, 'POS Credit');
       } else {
@@ -358,7 +437,6 @@ export const MockService = {
     }
   },
   
-  // Expose existing methods
   updateCustomer: async (id: string, updates: Partial<Customer>) => {
     const { error } = await supabase.from('customers').update(updates).eq('id', id);
     if (error) throw error;
@@ -376,7 +454,7 @@ export const MockService = {
     return customer;
   },
   addProduct: async (product: Product) => {
-    const { error } = await supabase.from('products').insert(product);
+    const { error } = await supabase.from('customers').insert(product);
     if (error) throw error;
     CACHE_PRODUCTS.push(product);
     return product;

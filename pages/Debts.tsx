@@ -95,10 +95,20 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         if (!selectedDetailCustomer) return [];
         const customerDebts = allDebts.filter(d => d.customerId === selectedDetailCustomer.id);
         const customerRepayments = allPayments.filter(p => p.customerId === selectedDetailCustomer.id);
-        const cats = new Set<string>();
-        customerDebts.forEach(d => cats.add(d.category));
-        customerRepayments.forEach(p => cats.add(p.category));
-        return Array.from(cats).sort();
+        
+        // Calculate balance per category
+        const catMap: Record<string, number> = {};
+        customerDebts.forEach(d => {
+            catMap[d.category] = (catMap[d.category] || 0) + d.amount;
+        });
+        customerRepayments.forEach(p => {
+            catMap[p.category] = (catMap[p.category] || 0) - p.amount;
+        });
+
+        // Only return categories with an outstanding balance (debt > 0)
+        return Object.keys(catMap)
+            .filter(cat => catMap[cat] > 0.01)
+            .sort();
     }, [selectedDetailCustomer, allDebts, allPayments]);
 
     const liveCustomerBalance = useMemo(() => {
@@ -266,20 +276,58 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
             selectedProducts.forEach(item => {
                 const cat = debtAssignments[item.product.id] || item.product.category;
                 if (!itemsByCat[cat]) itemsByCat[cat] = [];
-                itemsByCat[cat].push({ productId: item.product.id, productName: item.product.name, quantity: item.qty, price: item.product.price, category: cat });
+                // CRITICAL FIX: use item.qty instead of item.quantity
+                itemsByCat[cat].push({ 
+                    productId: item.product.id, 
+                    productName: item.product.name, 
+                    quantity: item.qty, 
+                    price: item.product.price, 
+                    category: cat 
+                });
             });
+
             for (const [cat, items] of Object.entries(itemsByCat)) {
+                // Ensure quantity is correct in reduction
                 const total = items.reduce((s, i) => s + (i.price * i.quantity), 0);
-                await MockService.createDebt({ id: `d-p-${Date.now()}-${Math.random().toString(36).substr(2,5)}`, customerId: selectedCustomer.id, amount: total, paidAmount: 0, items, category: cat, createdAt, status: DebtStatus.UNPAID });
+                if (isNaN(total)) throw new Error("Calculation error: Invalid amount.");
+                
+                await MockService.createDebt({ 
+                    id: `d-p-${Date.now()}-${Math.random().toString(36).substr(2,5)}`, 
+                    customerId: selectedCustomer.id, 
+                    amount: total, 
+                    paidAmount: 0, 
+                    items, 
+                    category: cat, 
+                    createdAt, 
+                    status: DebtStatus.UNPAID 
+                });
             }
+
             if (manualEntry.amount) {
-                await MockService.createDebt({ id: `d-m-${Date.now()}`, customerId: selectedCustomer.id, amount: parseFloat(manualEntry.amount), paidAmount: 0, items: [], category: manualEntry.category || 'Manual Entry', createdAt, status: DebtStatus.UNPAID, notes: manualEntry.description });
+                const manualAmt = parseFloat(manualEntry.amount);
+                if (isNaN(manualAmt)) throw new Error("Invalid manual entry amount.");
+                
+                await MockService.createDebt({ 
+                    id: `d-m-${Date.now()}`, 
+                    customerId: selectedCustomer.id, 
+                    amount: manualAmt, 
+                    paidAmount: 0, 
+                    items: [], 
+                    category: manualEntry.category || 'Manual Entry', 
+                    createdAt, 
+                    status: DebtStatus.UNPAID, 
+                    notes: manualEntry.description 
+                });
             }
-            setShowAddModal(false); setSelectedProducts([]); setManualEntry({ amount: '', category: 'Manual Entry', description: '' }); 
+            
+            setShowAddModal(false); 
+            setSelectedProducts([]); 
+            setManualEntry({ amount: '', category: 'Manual Entry', description: '' }); 
             setRefresh(prev => prev + 1);
             showToast('Success', 'success');
-        } catch (e) {
-            showToast('Failed to save', 'error');
+        } catch (e: any) {
+            console.error("Debt Submission Error:", e);
+            showToast(e.message || 'Failed to save', 'error');
         } finally {
             setIsSubmitting(false);
         }
