@@ -244,7 +244,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in-95 duration-200">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[2.5rem] shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in-95 duration-200">
                         <div className="bg-orange-600 p-6 text-white flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-3">
                                 <PackagePlus size={20} strokeWidth={3} />
@@ -252,7 +252,7 @@ export const Products: React.FC<PageProps> = ({ lang, user }) => {
                             </div>
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-all"><X size={24} /></button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-8">
+                        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                                 {/* IMAGE PREVIEW SECTION */}
                                 <div className="md:col-span-5 space-y-4">

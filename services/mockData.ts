@@ -454,7 +454,7 @@ export const MockService = {
     return customer;
   },
   addProduct: async (product: Product) => {
-    const { error } = await supabase.from('customers').insert(product);
+    const { error } = await supabase.from('products').insert(product);
     if (error) throw error;
     CACHE_PRODUCTS.push(product);
     return product;
