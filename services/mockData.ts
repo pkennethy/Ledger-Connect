@@ -172,6 +172,72 @@ export const MockService = {
     return processedCount;
   },
 
+  /**
+   * PER-CUSTOMER CALIBRATION (Audit Lite)
+   * Recalculates balance for a single customer by re-applying payments to debts.
+   */
+  recalibrateCustomerBalance: async (customerId: string) => {
+    const customer = CACHE_CUSTOMERS.find(c => c.id === customerId);
+    if (!customer) throw new Error("Customer not found");
+
+    const customerDebts = CACHE_DEBTS
+        .filter(d => d.customerId === customerId)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    
+    const customerRepayments = CACHE_REPAYMENTS.filter(p => p.customerId === customerId);
+
+    // Reset all debts for this customer
+    customerDebts.forEach(d => {
+        d.paidAmount = 0;
+        d.status = DebtStatus.UNPAID;
+    });
+
+    // Group payments by category
+    const paymentsByNormalizedCategory: Record<string, number> = {};
+    customerRepayments.forEach(p => {
+        const normCat = (p.category || 'General').trim().toLowerCase();
+        paymentsByNormalizedCategory[normCat] = (paymentsByNormalizedCategory[normCat] || 0) + p.amount;
+    });
+
+    // Re-apply payments
+    for (const [normCat, totalPaid] of Object.entries(paymentsByNormalizedCategory)) {
+        let remainingPool = totalPaid;
+        const targetDebts = customerDebts.filter(d => (d.category || 'General').trim().toLowerCase() === normCat);
+
+        for (const debt of targetDebts) {
+            if (remainingPool <= 0) break;
+            const paymentToApply = Math.min(debt.amount, remainingPool);
+            debt.paidAmount = parseFloat(paymentToApply.toFixed(2));
+            remainingPool -= paymentToApply;
+            
+            if (debt.paidAmount >= debt.amount) {
+                debt.status = DebtStatus.PAID;
+            } else if (debt.paidAmount > 0) {
+                debt.status = DebtStatus.PARTIAL;
+            }
+        }
+    }
+
+    // Update database
+    if (customerDebts.length > 0) {
+        await supabase.from('debts').upsert(customerDebts);
+    }
+
+    const actualOutstanding = customerDebts.reduce((s, d) => s + (d.amount - d.paidAmount), 0);
+    const finalBalance = Math.max(0, parseFloat(actualOutstanding.toFixed(2)));
+
+    await supabase.from('customers').update({ totalDebt: finalBalance }).eq('id', customerId);
+    
+    // Update cache
+    customer.totalDebt = finalBalance;
+    CACHE_DEBTS = CACHE_DEBTS.map(d => {
+        const updated = customerDebts.find(ud => ud.id === d.id);
+        return updated || d;
+    });
+
+    return finalBalance;
+  },
+
   triggerTransactionEmail: async (customerId: string, txnType: 'DEBT' | 'REPAYMENT' | 'DELETION', amount: number, category: string) => {
       try {
           const settings = MockService.getSettings();

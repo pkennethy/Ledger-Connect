@@ -45,6 +45,7 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
     const [detailFilterDate, setDetailFilterDate] = useState(getLocalToday());
     const [ledgerPage, setLedgerPage] = useState(1);
     const ledgerItemsPerPage = 10;
+    const [isCalibratingUser, setIsCalibratingUser] = useState(false);
 
     // --- DRAG AND DROP STATE ---
     const [draggedTxn, setDraggedTxn] = useState<{id: string, type: 'DEBT' | 'PAYMENT', category: string} | null>(null);
@@ -250,6 +251,20 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
         setShowAddModal(true);
     };
 
+    const handleQuickCalibrate = async () => {
+        if (!selectedDetailCustomer || isCalibratingUser) return;
+        setIsCalibratingUser(true);
+        try {
+            await MockService.recalibrateCustomerBalance(selectedDetailCustomer.id);
+            setRefresh(prev => prev + 1);
+            showToast('Account audit complete. Balances fixed.', 'success');
+        } catch (e) {
+            showToast('Audit failed', 'error');
+        } finally {
+            setIsCalibratingUser(false);
+        }
+    };
+
     const handleAddProduct = (pid: string) => {
         const p = allProducts.find(x => x.id === pid);
         if (!p || !selectedCustomer) return;
@@ -276,7 +291,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
             selectedProducts.forEach(item => {
                 const cat = debtAssignments[item.product.id] || item.product.category;
                 if (!itemsByCat[cat]) itemsByCat[cat] = [];
-                // CRITICAL FIX: use item.qty instead of item.quantity
                 itemsByCat[cat].push({ 
                     productId: item.product.id, 
                     productName: item.product.name, 
@@ -287,7 +301,6 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
             });
 
             for (const [cat, items] of Object.entries(itemsByCat)) {
-                // Ensure quantity is correct in reduction
                 const total = items.reduce((s, i) => s + (i.price * i.quantity), 0);
                 if (isNaN(total)) throw new Error("Calculation error: Invalid amount.");
                 
@@ -726,8 +739,20 @@ export const Debts: React.FC<PageProps> = ({ lang, user }) => {
                                 <div className="w-14 h-14 rounded-[1.5rem] bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center text-xl font-black shadow-lg">{getInitials(selectedDetailCustomer.name)}</div>
                                 <div><h2 className="text-2xl font-black text-gray-900 dark:text-white leading-none uppercase tracking-tight">{selectedDetailCustomer.name}</h2><p className="text-xs text-gray-500 dark:text-slate-400 font-bold mt-1 tracking-widest">{selectedDetailCustomer.phone}</p></div>
                             </div>
-                            <div className="text-right">
-                                <p className="text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1">Balance</p>
+                            <div className="text-right flex flex-col items-end">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">Balance</p>
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={handleQuickCalibrate} 
+                                            disabled={isCalibratingUser}
+                                            title="Deep Recalibration Audit"
+                                            className={`p-1 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 transition-all ${isCalibratingUser ? 'animate-spin text-blue-500' : 'hover:text-blue-500'}`}
+                                        >
+                                            <RefreshCw size={12} />
+                                        </button>
+                                    )}
+                                </div>
                                 <p className="text-3xl font-black text-red-600 dark:text-rose-400 font-mono tracking-tighter">₱{liveCustomerBalance.toLocaleString()}</p>
                             </div>
                         </div>
